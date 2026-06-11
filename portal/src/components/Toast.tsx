@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { X, CheckCircle, XCircle, Info, Clock } from 'lucide-react'
+import { X, CheckCircle, XCircle, Info } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -49,55 +49,20 @@ function ToastCard({ toast, onDismiss }: ToastCardProps) {
     setTimeout(() => onDismiss(toast.id), 300)
   }, [toast.id, onDismiss])
 
-  // Auto-dismiss non-demo toasts after 4 seconds
+  // Auto-dismiss after 4 seconds
   useEffect(() => {
-    if (toast.type !== 'demo') {
-      const t = setTimeout(() => dismiss(), 4000)
-      return () => clearTimeout(t)
-    }
-  }, [toast.type, dismiss])
+    const t = setTimeout(() => dismiss(), 4000)
+    return () => clearTimeout(t)
+  }, [dismiss])
 
   const iconMap = {
     success: <CheckCircle className="w-5 h-5 text-green-500 shrink-0 mt-0.5" />,
     error: <XCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />,
     info: <Info className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />,
-    demo: <Clock className="w-5 h-5 text-blue-400 shrink-0 mt-0.5" />,
+    demo: <CheckCircle className="w-5 h-5 text-green-500 shrink-0 mt-0.5" />,
   }
 
   const translateClass = visible && !leaving ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0'
-
-  if (toast.type === 'demo') {
-    return (
-      <div
-        className={`flex items-start gap-3 bg-white border border-gray-200 rounded-xl shadow-lg p-4 w-[360px] transition-all duration-300 ease-out ${translateClass}`}
-      >
-        {iconMap.demo}
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-gray-900">{toast.title}</p>
-          <p className="text-xs text-gray-500 mt-0.5">
-            This change will revert in 30 minutes — this is a demo account.
-          </p>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <a
-            href="https://bmpcentral.com"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white px-2.5 py-1.5 rounded-lg whitespace-nowrap transition-colors"
-          >
-            Get BMP Central →
-          </a>
-          <button
-            onClick={dismiss}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
-            aria-label="Dismiss"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      </div>
-    )
-  }
 
   return (
     <div

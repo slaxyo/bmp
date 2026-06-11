@@ -100,7 +100,7 @@ function MaintenanceModal({ onClose, onSubmit }: { onClose: () => void; onSubmit
   function handleSubmit() {
     setSubmitted(true)
     onSubmit({ ...step1, ...step2 })
-    showToast({ type: 'demo', title: `Maintenance request ${ticketId} submitted` })
+    showToast({ type: 'success', title: `Maintenance request ${ticketId} submitted` })
   }
 
   function toggleTime(t: string) {
@@ -467,7 +467,7 @@ function ReceiptModal({ row, onClose }: { row: PaymentRow; onClose: () => void }
           </div>
           <div className="flex gap-3">
             <button
-              onClick={() => showToast({ type: 'demo', title: 'Print receipt (demo)' })}
+              onClick={() => showToast({ type: 'success', title: 'Printing receipt' })}
               className="flex-1 border border-gray-200 hover:bg-gray-50 text-gray-700 font-semibold py-2.5 rounded-xl text-sm transition-colors"
             >
               Print
@@ -488,7 +488,7 @@ function AddPaymentMethodModal({ onClose }: { onClose: () => void }) {
   const [card, setCard] = useState({ cardNumber: '', nameOnCard: '', expiry: '', cvv: '' })
 
   function handleAdd() {
-    showToast({ type: 'demo', title: 'Payment method saved. This is a demo — no real account was added.' })
+    showToast({ type: 'success', title: 'Payment method saved' })
     onClose()
   }
 
@@ -633,7 +633,7 @@ function LeaseViewerModal({ onClose }: { onClose: () => void }) {
           </div>
           <div className="flex gap-3 pt-2">
             <button
-              onClick={() => showToast({ type: 'demo', title: 'Lease PDF download (demo)' })}
+              onClick={() => showToast({ type: 'success', title: 'Downloading lease PDF' })}
               className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors"
             >
               Download PDF
@@ -670,11 +670,12 @@ function PaymentsTab() {
       <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-2xl p-6 text-white">
         <div className="flex items-start justify-between mb-4">
           <div>
-            <p className="text-blue-200 text-sm font-medium">Current Month</p>
-            <p className="text-4xl font-black mt-1">$1,450</p>
+            <p className="text-blue-200 text-xs font-semibold uppercase tracking-wider mb-1">June 2026 Rent</p>
+            <p className="text-5xl font-black tracking-tight mt-1">$1,450</p>
           </div>
-          <span className="px-3 py-1 bg-green-400 text-green-900 text-xs font-bold rounded-full">
-            PAID · June 2026
+          <span className="flex items-center gap-1.5 px-3 py-1.5 bg-green-400 text-green-900 text-xs font-black rounded-full uppercase tracking-wide">
+            <span className="w-1.5 h-1.5 bg-green-700 rounded-full" />
+            PAID
           </span>
         </div>
         <div className="grid grid-cols-3 gap-4 mt-4 pt-4 border-t border-blue-500">
@@ -699,14 +700,14 @@ function PaymentsTab() {
             <button
               onClick={() => {
                 setAutopay(!autopay)
-                showToast({ type: 'demo', title: `Autopay ${!autopay ? 'enabled' : 'disabled'}` })
+                showToast({ type: 'success', title: `Autopay ${!autopay ? 'enabled' : 'disabled'}` })
               }}
               className={`relative w-10 h-6 rounded-full transition-colors ${autopay ? 'bg-green-400' : 'bg-blue-400'}`}
             >
               <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${autopay ? 'translate-x-4' : 'translate-x-0'}`} />
             </button>
             <button
-              onClick={() => showToast({ type: 'demo', title: 'Edit autopay settings' })}
+              onClick={() => showToast({ type: 'info', title: 'Edit autopay settings' })}
               className="text-xs text-blue-200 hover:text-white underline"
             >
               Edit
@@ -739,7 +740,19 @@ function PaymentsTab() {
                 <td className="px-5 py-3 text-sm text-gray-600">{r.datePaid}</td>
                 <td className="px-5 py-3 text-sm text-gray-600">{r.method}</td>
                 <td className="px-5 py-3">
-                  <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-green-100 text-green-700">Paid</span>
+                  <span className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold rounded-full ${
+                    r.status === 'paid' ? 'bg-green-100 text-green-700 ring-1 ring-green-200' :
+                    r.status === 'late' ? 'bg-red-100 text-red-700 ring-1 ring-red-200' :
+                    r.status === 'pending' ? 'bg-amber-100 text-amber-700 ring-1 ring-amber-200' :
+                    'bg-gray-100 text-gray-600 ring-1 ring-gray-200'
+                  }`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${
+                      r.status === 'paid' ? 'bg-green-500' :
+                      r.status === 'late' ? 'bg-red-500' :
+                      r.status === 'pending' ? 'bg-amber-500' : 'bg-gray-400'
+                    }`} />
+                    {r.status.charAt(0).toUpperCase() + r.status.slice(1)}
+                  </span>
                 </td>
                 <td className="px-5 py-3">
                   <button
@@ -848,7 +861,7 @@ function TenantMessagesTab() {
       },
     ])
     setCompose('')
-    showToast({ type: 'demo', title: 'Message sent' })
+    showToast({ type: 'success', title: 'Message sent' })
   }
 
   function saveEdit(id: string) {
@@ -858,25 +871,28 @@ function TenantMessagesTab() {
       )
     )
     setEditingId(null)
-    showToast({ type: 'demo', title: 'Message edited' })
+    showToast({ type: 'success', title: 'Message edited' })
   }
 
   function unsend(id: string) {
     setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, unsent: true } : m)))
     setMenuOpenId(null)
-    showToast({ type: 'demo', title: 'Message unsent' })
+    showToast({ type: 'success', title: 'Message unsent' })
   }
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Header */}
-      <div className="px-5 py-3 border-b border-gray-200 bg-white flex items-center gap-3 shrink-0">
-        <div className="w-9 h-9 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold text-sm shrink-0">
+      <div className="px-5 py-4 border-b border-gray-200 bg-white flex items-center gap-3 shrink-0 shadow-sm">
+        <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold text-sm shrink-0 shadow-sm">
           BC
         </div>
-        <div>
-          <p className="font-semibold text-gray-900">BMP Central</p>
-          <p className="text-xs text-gray-500">Property Management</p>
+        <div className="flex-1">
+          <p className="font-bold text-gray-900">BMP Central</p>
+          <div className="flex items-center gap-1.5 mt-0.5">
+            <span className="w-2 h-2 bg-green-400 rounded-full" />
+            <p className="text-xs text-gray-500">Property Management · Online</p>
+          </div>
         </div>
       </div>
 
@@ -897,8 +913,9 @@ function TenantMessagesTab() {
             return (
               <div key={msg.id} className={`flex ${isTenant ? 'justify-end' : 'justify-start'}`}>
                 <div className="max-w-[70%] space-y-2">
-                  <input
-                    className="w-full px-3 py-2 text-sm border border-blue-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  <textarea
+                    rows={4}
+                    className="w-full px-3 py-2 text-sm border border-blue-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                     value={editText}
                     onChange={(e) => setEditText(e.target.value)}
                     autoFocus
@@ -933,9 +950,9 @@ function TenantMessagesTab() {
                           (edited)
                         </button>
                         {editedPopoverId === msg.id && (
-                          <div className="absolute bottom-full left-0 mb-1 bg-gray-900 text-white text-xs rounded-lg px-3 py-2 w-[200px] z-10 shadow-lg">
-                            <p className="font-semibold mb-0.5">Original:</p>
-                            <p className="opacity-80">{msg.originalText}</p>
+                          <div className="absolute bottom-full left-0 mb-2 bg-black/60 backdrop-blur-sm rounded-xl px-4 py-3 w-[220px] z-20 shadow-xl border border-white/10">
+                            <p className="text-white font-semibold text-xs mb-1">Original:</p>
+                            <p className="text-white/80 text-xs">{msg.originalText}</p>
                           </div>
                         )}
                       </span>
@@ -979,8 +996,8 @@ function TenantMessagesTab() {
       </div>
 
       {/* Compose bar */}
-      <div className="p-4 border-t border-gray-200 bg-white shrink-0">
-        <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-2xl px-3 py-2">
+      <div className="px-4 py-3 border-t border-gray-200 bg-white shrink-0">
+        <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-2xl px-4 py-2.5 focus-within:border-blue-300 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
           <input
             className="flex-1 bg-transparent text-sm outline-none placeholder-gray-400"
             placeholder="Message BMP Central…"
@@ -988,10 +1005,10 @@ function TenantMessagesTab() {
             onChange={(e) => setCompose(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() } }}
           />
-          <button onClick={() => showToast({ type: 'info', title: 'Emoji picker coming soon' })} className="text-gray-400 hover:text-gray-600 p-1">
+          <button onClick={() => showToast({ type: 'info', title: 'Emoji picker coming soon' })} className="text-gray-400 hover:text-gray-600 p-1 transition-colors">
             <Smile className="w-5 h-5" />
           </button>
-          <button onClick={() => showToast({ type: 'demo', title: 'File attached (demo)' })} className="text-gray-400 hover:text-gray-600 p-1">
+          <button onClick={() => showToast({ type: 'info', title: 'File attached' })} className="text-gray-400 hover:text-gray-600 p-1 transition-colors">
             <Paperclip className="w-5 h-5" />
           </button>
           <button
@@ -1015,26 +1032,38 @@ function OverviewTab({ onNewTicket }: { onNewTicket: () => void }) {
   return (
     <div className="p-5 space-y-5">
       {/* Rent card */}
-      <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-2xl p-5 text-white">
-        <div className="flex items-center justify-between mb-3">
-          <p className="text-blue-200 text-sm font-medium">June 2026 Rent</p>
-          <span className="px-2.5 py-1 bg-green-400 text-green-900 text-xs font-bold rounded-full">PAID</span>
+      <div className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl p-6 text-white shadow-lg">
+        <div className="flex items-start justify-between mb-4">
+          <div>
+            <p className="text-blue-200 text-xs font-semibold uppercase tracking-wider mb-1">Current Month Rent</p>
+            <p className="text-5xl font-black tracking-tight">$1,450</p>
+            <p className="text-blue-200 text-sm mt-1.5">June 2026</p>
+          </div>
+          <span className="px-3 py-1.5 bg-green-400 text-green-900 text-xs font-black rounded-full uppercase tracking-wide">PAID</span>
         </div>
-        <p className="text-3xl font-black">$1,450</p>
-        <p className="text-blue-200 text-xs mt-1">Next payment: July 15, 2026</p>
+        <div className="border-t border-blue-500/50 pt-3 flex items-center justify-between">
+          <div>
+            <p className="text-blue-300 text-xs">Next Payment</p>
+            <p className="text-white font-semibold text-sm mt-0.5">July 15, 2026 · $1,450</p>
+          </div>
+          <div className="text-right">
+            <p className="text-blue-300 text-xs">Payment Method</p>
+            <p className="text-white font-semibold text-sm mt-0.5">ACH · ···4821</p>
+          </div>
+        </div>
       </div>
 
       {/* Lease info */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
-        <h3 className="font-semibold text-gray-900 mb-3">Lease Details</h3>
-        <div className="space-y-2">
+        <h3 className="text-base font-bold text-gray-900 mb-3">Lease Details</h3>
+        <div className="divide-y divide-gray-50">
           {[
             { label: 'Unit', value: '1A — 14 Oakwood Drive, Austin TX' },
             { label: 'Lease Term', value: 'Jan 1, 2026 – Dec 31, 2026' },
             { label: 'Monthly Rent', value: '$1,450' },
             { label: 'Move-in Date', value: 'January 1, 2026' },
           ].map(({ label, value }) => (
-            <div key={label} className="flex items-center justify-between text-sm">
+            <div key={label} className="flex items-center justify-between py-2 text-sm">
               <span className="text-gray-500">{label}</span>
               <span className="font-semibold text-gray-900">{value}</span>
             </div>
@@ -1045,7 +1074,7 @@ function OverviewTab({ onNewTicket }: { onNewTicket: () => void }) {
       {/* Recent tickets */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="font-semibold text-gray-900">Maintenance Requests</h3>
+          <h3 className="text-base font-bold text-gray-900">Maintenance Requests</h3>
           <button
             onClick={onNewTicket}
             className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1"
@@ -1058,8 +1087,16 @@ function OverviewTab({ onNewTicket }: { onNewTicket: () => void }) {
         ) : (
           <div className="space-y-3">
             {myTickets.map((t) => (
-              <div key={t.id} className="flex items-start gap-3 p-3 bg-gray-50 rounded-xl">
-                <div className={`w-2 h-2 rounded-full mt-1.5 ${t.status === 'open' ? 'bg-blue-500' : t.status === 'in_progress' ? 'bg-amber-500' : 'bg-green-500'}`} />
+              <div key={t.id} className={`flex items-start gap-3 p-3 bg-gray-50 rounded-xl border-l-3 ${
+                t.priority === 'emergency' ? 'border-l-red-500' :
+                t.priority === 'high' ? 'border-l-orange-500' :
+                t.priority === 'medium' ? 'border-l-amber-400' : 'border-l-gray-300'
+              }`} style={{ borderLeftWidth: '3px', borderLeftStyle: 'solid' }}>
+                <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${
+                  t.priority === 'emergency' ? 'bg-red-500' :
+                  t.priority === 'high' ? 'bg-orange-500' :
+                  t.priority === 'medium' ? 'bg-amber-500' : 'bg-gray-400'
+                }`} />
                 <div className="flex-1">
                   <p className="text-sm font-semibold text-gray-900">{t.title}</p>
                   <p className="text-xs text-gray-500 mt-0.5">{t.category} · {t.createdAt}</p>
@@ -1107,7 +1144,7 @@ function TenantDocumentsTab() {
             <button
               onClick={() => {
                 if (d.isLease) setShowLeaseViewer(true)
-                else showToast({ type: 'demo', title: `Downloading ${d.name}` })
+                else showToast({ type: 'success', title: `Downloading ${d.name}` })
               }}
               className="text-xs font-semibold text-blue-600 hover:text-blue-700"
             >
@@ -1145,11 +1182,24 @@ function MaintenanceListTab({ onNew }: { onNew: () => void }) {
       ) : (
         <div className="space-y-3">
           {myTickets.map((t) => (
-            <div key={t.id} className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+            <div key={t.id} className={`bg-white rounded-xl border shadow-sm p-4 border-l-4 ${
+              t.priority === 'emergency' ? 'border-gray-200 border-l-red-500' :
+              t.priority === 'high' ? 'border-gray-200 border-l-orange-500' :
+              t.priority === 'medium' ? 'border-gray-200 border-l-amber-400' :
+              'border-gray-200 border-l-gray-300'
+            }`}>
               <div className="flex items-start justify-between mb-2">
                 <div>
-                  <p className="font-semibold text-gray-900">{t.title}</p>
-                  <p className="text-xs text-gray-500 mt-0.5">{t.id} · {t.category} · {t.unit}</p>
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <p className="font-semibold text-gray-900">{t.title}</p>
+                    <span className={`text-xs font-bold px-1.5 py-0.5 rounded uppercase tracking-wide ${
+                      t.priority === 'emergency' ? 'bg-red-100 text-red-700' :
+                      t.priority === 'high' ? 'bg-orange-100 text-orange-700' :
+                      t.priority === 'medium' ? 'bg-amber-100 text-amber-700' :
+                      'bg-gray-100 text-gray-500'
+                    }`}>{t.priority}</span>
+                  </div>
+                  <p className="text-xs text-gray-500">{t.id} · {t.category} · {t.unit}</p>
                 </div>
                 <span className={`text-xs font-semibold px-2 py-0.5 rounded-full shrink-0 ${
                   t.status === 'open' ? 'bg-blue-100 text-blue-700' :
@@ -1219,19 +1269,19 @@ export default function TenantPortal() {
       </div>
 
       {/* Tabs */}
-      <div className="bg-white border-b border-gray-200 px-5 sticky top-[73px] z-20">
-        <div className="flex gap-1 overflow-x-auto">
+      <div className="bg-white border-b-2 border-gray-200 px-4 sticky top-[73px] z-20 shadow-sm">
+        <div className="flex overflow-x-auto">
           {tabs.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-1.5 px-4 py-3.5 text-sm font-semibold whitespace-nowrap border-b-2 transition-colors ${
+              className={`flex items-center gap-2 px-5 py-4 text-sm font-semibold whitespace-nowrap border-b-2 -mb-0.5 transition-all ${
                 activeTab === tab.id
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
+                  ? 'border-blue-600 text-blue-600 bg-blue-50/50'
+                  : 'border-transparent text-gray-500 hover:text-gray-800 hover:bg-gray-50'
               }`}
             >
-              {tab.icon}
+              <span className={activeTab === tab.id ? 'text-blue-600' : 'text-gray-400'}>{tab.icon}</span>
               {tab.label}
             </button>
           ))}

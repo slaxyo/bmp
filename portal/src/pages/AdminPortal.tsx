@@ -5,7 +5,7 @@ import {
   Settings, ChevronLeft, ChevronRight, Plus, MoreHorizontal, Send,
   Smile, Paperclip, Edit2, Home, DollarSign, Bell, X,
   Eye, EyeOff, Camera, Pencil, CheckCircle, LogOut, HelpCircle,
-  Keyboard, TrendingUp, BarChart2, AlertTriangle, Search,
+  Keyboard, TrendingUp, BarChart2, AlertTriangle, Search, ChevronUp, ChevronDown,
 } from 'lucide-react'
 import {
   XAxis, YAxis, CartesianGrid, Tooltip,
@@ -17,7 +17,7 @@ import {
   tenants as initialTenants,
   maintenanceTickets as initialTickets,
   properties as initialProperties,
-  activityFeed, occupancyData,
+  activityFeed, occupancyData, revenueData,
   messageThreads, chatMessages,
   ticketsByMonth, ticketsByType,
 } from '../data/mockData'
@@ -113,7 +113,7 @@ function InviteTenantModal({ properties, onClose, onAdd }: InviteTenantModalProp
       moveIn: form.leaseStart || new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
     }
     onAdd(newTenant)
-    showToast({ type: 'demo', title: `Tenant ${form.name} invited (demo — invite email not sent)` })
+    showToast({ type: 'success', title: `Tenant ${form.name} invited` })
     onClose()
   }
 
@@ -262,7 +262,7 @@ function AddPropertyModal({ onClose, onAdd }: AddPropertyModalProps) {
       tenants: [],
     }
     onAdd(newProp)
-    showToast({ type: 'demo', title: `Property "${newProp.name}" added (demo)` })
+    showToast({ type: 'success', title: `Property "${newProp.name}" added` })
     onClose()
   }
 
@@ -421,7 +421,7 @@ function NewTicketModal({ tenants, onClose, onAdd }: NewTicketModalProps) {
       updatedAt: today,
     }
     onAdd(newTicket)
-    showToast({ type: 'demo', title: `Ticket ${newTicket.id} created (demo)` })
+    showToast({ type: 'success', title: `Ticket ${newTicket.id} created` })
     onClose()
   }
 
@@ -564,16 +564,16 @@ function ReportModal({ onClose }: { onClose: () => void }) {
           </div>
           <div className="flex gap-3">
             <button
-              onClick={() => showToast({ type: 'demo', title: 'Print report (demo)' })}
+              onClick={() => showToast({ type: 'info', title: 'Print report' })}
               className="flex-1 border border-gray-200 hover:bg-gray-50 text-gray-700 font-semibold py-2.5 rounded-xl text-sm transition-colors"
             >
               Print
             </button>
             <button
-              onClick={() => showToast({ type: 'demo', title: 'PDF download (demo)' })}
+              onClick={() => showToast({ type: 'info', title: 'PDF download' })}
               className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors"
             >
-              Download PDF (Demo)
+              Download PDF
             </button>
             <button onClick={onClose} className="flex-1 border border-gray-200 hover:bg-gray-50 text-gray-700 font-semibold py-2.5 rounded-xl text-sm transition-colors">Close</button>
           </div>
@@ -602,7 +602,7 @@ function AnnouncementModal({ tenants, properties, onClose }: AnnouncementModalPr
     if (Object.keys(e).length > 0) { setErrors(e); return }
     const count = form.recipient === 'all' ? tenants.length
       : tenants.filter((t) => t.property === form.property).length
-    showToast({ type: 'demo', title: `Announcement sent to ${count} tenant${count !== 1 ? 's' : ''} (demo)` })
+    showToast({ type: 'success', title: `Announcement sent to ${count} tenant${count !== 1 ? 's' : ''}` })
     onClose()
   }
 
@@ -687,7 +687,7 @@ function ScheduleInspectionModal({ properties, onClose }: ScheduleInspectionModa
     if (!form.property) e.property = 'Required'
     if (!form.date) e.date = 'Required'
     if (Object.keys(e).length > 0) { setErrors(e); return }
-    showToast({ type: 'demo', title: `Inspection scheduled at ${form.property} on ${form.date} (demo)` })
+    showToast({ type: 'success', title: `Inspection scheduled at ${form.property} on ${form.date}` })
     onClose()
   }
 
@@ -789,7 +789,7 @@ function DocViewerModal({ filename, onClose }: { filename: string; onClose: () =
           </div>
           <div className="flex gap-3 mt-4">
             <button
-              onClick={() => showToast({ type: 'demo', title: 'Download (demo)' })}
+              onClick={() => showToast({ type: 'info', title: 'Download' })}
               className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors"
             >
               Download
@@ -851,7 +851,7 @@ function MessagesPanel({ threads, setThreads, selectedThreadId, setSelectedThrea
       )
     )
     setCompose('')
-    showToast({ type: 'demo', title: 'Message sent' })
+    showToast({ type: 'success', title: 'Message sent' })
   }
 
   function startEdit(msg: ChatMessage) {
@@ -869,7 +869,7 @@ function MessagesPanel({ threads, setThreads, selectedThreadId, setSelectedThrea
       )
     )
     setEditingId(null)
-    showToast({ type: 'demo', title: 'Message edited' })
+    showToast({ type: 'success', title: 'Message edited' })
   }
 
   function unsendMessage(id: string) {
@@ -877,7 +877,7 @@ function MessagesPanel({ threads, setThreads, selectedThreadId, setSelectedThrea
       prev.map((m) => (m.id === id ? { ...m, unsent: true } : m))
     )
     setMenuOpenId(null)
-    showToast({ type: 'demo', title: 'Message unsent' })
+    showToast({ type: 'success', title: 'Message unsent' })
   }
 
   return (
@@ -966,8 +966,9 @@ function MessagesPanel({ threads, setThreads, selectedThreadId, setSelectedThrea
                 return (
                   <div key={msg.id} className={`flex ${isPm ? 'justify-end' : 'justify-start'}`}>
                     <div className="max-w-[70%] space-y-2">
-                      <input
-                        className="w-full px-3 py-2 text-sm border border-blue-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      <textarea
+                        rows={4}
+                        className="w-full px-3 py-2 text-sm border border-blue-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                         value={editText}
                         onChange={(e) => setEditText(e.target.value)}
                         autoFocus
@@ -1020,9 +1021,9 @@ function MessagesPanel({ threads, setThreads, selectedThreadId, setSelectedThrea
                               (edited)
                             </button>
                             {editedPopoverId === msg.id && (
-                              <div className="absolute bottom-full left-0 mb-1 bg-gray-900 text-white text-xs rounded-lg px-3 py-2 w-[200px] z-10 shadow-lg">
-                                <p className="font-semibold mb-0.5">Original message:</p>
-                                <p className="opacity-80">{msg.originalText}</p>
+                              <div className="absolute bottom-full left-0 mb-2 bg-black/60 backdrop-blur-sm rounded-xl px-4 py-3 w-[240px] z-20 shadow-xl border border-white/10">
+                                <p className="text-xs font-semibold text-white/70 mb-1 uppercase tracking-wider">Original</p>
+                                <p className="text-sm text-white">{msg.originalText}</p>
                               </div>
                             )}
                           </span>
@@ -1108,7 +1109,7 @@ function MessagesPanel({ threads, setThreads, selectedThreadId, setSelectedThrea
                 <Smile className="w-5 h-5" />
               </button>
               <button
-                onClick={() => showToast({ type: 'demo', title: 'File attached (demo)' })}
+                onClick={() => showToast({ type: 'info', title: 'File attached' })}
                 className="text-gray-400 hover:text-gray-600 p-1"
                 title="Attach file"
               >
@@ -1177,19 +1178,14 @@ function SettingsPanel({ profileName, setProfileName, profilePhoto, setProfilePh
     if (file) {
       const url = URL.createObjectURL(file)
       setPhotoPreview(url)
-      showToast({ type: 'demo', title: 'Profile photo updated' })
+      showToast({ type: 'success', title: 'Profile photo updated' })
     }
   }
 
   function handleSaveProfile() {
     setProfileName(fullName)
     setProfilePhoto(photoPreview)
-    showToast({ type: 'demo', title: 'Profile updated — changes will revert in 30 minutes' })
-    setTimeout(() => {
-      setProfileName('BMP Central Admin')
-      setProfilePhoto(null)
-      showToast({ type: 'info', title: 'Demo profile reverted to defaults' })
-    }, 30 * 60 * 1000)
+    showToast({ type: 'success', title: 'Profile updated' })
   }
 
   return (
@@ -1336,7 +1332,7 @@ function SettingsPanel({ profileName, setProfileName, profilePhoto, setProfilePh
                   <input type="password" className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="••••••••" />
                 </div>
                 <button
-                  onClick={() => showToast({ type: 'demo', title: 'Password changed' })}
+                  onClick={() => showToast({ type: 'success', title: 'Password changed' })}
                   className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors"
                 >
                   Change Password
@@ -1353,7 +1349,7 @@ function SettingsPanel({ profileName, setProfileName, profilePhoto, setProfilePh
                 <button
                   onClick={() => {
                     setTwoFactor(!twoFactor)
-                    showToast({ type: 'demo', title: `Two-factor authentication ${!twoFactor ? 'enabled' : 'disabled'}` })
+                    showToast({ type: 'success', title: `Two-factor authentication ${!twoFactor ? 'enabled' : 'disabled'}` })
                   }}
                   className={`relative w-10 h-6 rounded-full transition-colors ${twoFactor ? 'bg-blue-600' : 'bg-gray-200'}`}
                 >
@@ -1381,7 +1377,7 @@ function SettingsPanel({ profileName, setProfileName, profilePhoto, setProfilePh
                 ))}
               </div>
               <button
-                onClick={() => showToast({ type: 'demo', title: 'Signed out of all other devices' })}
+                onClick={() => showToast({ type: 'success', title: 'Signed out of all other devices' })}
                 className="mt-4 w-full border border-gray-200 hover:bg-gray-50 text-gray-700 font-semibold py-2 rounded-xl text-sm transition-colors"
               >
                 Sign out all other devices
@@ -1415,7 +1411,7 @@ function SettingsPanel({ profileName, setProfileName, profilePhoto, setProfilePh
                         <button
                           onClick={() => {
                             setNotifToggles((prev) => ({ ...prev, [toggleKey]: !prev[toggleKey] }))
-                            showToast({ type: 'demo', title: `Notification preference updated` })
+                            showToast({ type: 'success', title: `Notification preference updated` })
                           }}
                           className={`relative w-10 h-6 rounded-full transition-colors ${notifToggles[toggleKey] ? 'bg-blue-600' : 'bg-gray-200'}`}
                         >
@@ -1460,7 +1456,7 @@ function SettingsPanel({ profileName, setProfileName, profilePhoto, setProfilePh
                   <button
                     onClick={() => {
                       setDarkMode(!darkMode)
-                      showToast({ type: 'demo', title: 'Dark mode preference saved' })
+                      showToast({ type: 'success', title: 'Dark mode preference saved' })
                     }}
                     className={`relative w-10 h-6 rounded-full transition-colors ${darkMode ? 'bg-blue-600' : 'bg-gray-200'}`}
                   >
@@ -1468,7 +1464,7 @@ function SettingsPanel({ profileName, setProfileName, profilePhoto, setProfilePh
                   </button>
                 </div>
                 <button
-                  onClick={() => showToast({ type: 'demo', title: 'Preferences saved' })}
+                  onClick={() => showToast({ type: 'success', title: 'Preferences saved' })}
                   className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors"
                 >
                   Save Preferences
@@ -1495,6 +1491,7 @@ const DEFAULT_QUICK_ACTIONS = [
 
 interface DashboardPanelProps {
   setActivePanel: (panel: string) => void
+  setAnalyticsSection: (section: string) => void
   onShowInviteModal: () => void
   onShowAddPropertyModal: () => void
   onShowReportModal: () => void
@@ -1505,7 +1502,7 @@ interface DashboardPanelProps {
 }
 
 function DashboardPanel({
-  setActivePanel, onShowInviteModal, onShowAddPropertyModal,
+  setActivePanel, setAnalyticsSection, onShowInviteModal, onShowAddPropertyModal,
   onShowReportModal, onShowAnnouncementModal, onShowScheduleModal,
 }: DashboardPanelProps) {
   const [editQuickActions, setEditQuickActions] = useState(false)
@@ -1515,6 +1512,14 @@ function DashboardPanel({
       return new Set(stored ? JSON.parse(stored) : [])
     } catch {
       return new Set()
+    }
+  })
+  const [actionsOrder, setActionsOrder] = useState<string[]>(() => {
+    try {
+      const stored = localStorage.getItem('adminActionsOrder')
+      return stored ? JSON.parse(stored) : DEFAULT_QUICK_ACTIONS.map(a => a.id)
+    } catch {
+      return DEFAULT_QUICK_ACTIONS.map(a => a.id)
     }
   })
 
@@ -1528,6 +1533,21 @@ function DashboardPanel({
     })
   }
 
+  function moveAction(id: string, direction: 'up' | 'down') {
+    setActionsOrder(prev => {
+      const idx = prev.indexOf(id)
+      if (idx < 0) return prev
+      const next = [...prev]
+      if (direction === 'up' && idx > 0) {
+        [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]]
+      } else if (direction === 'down' && idx < next.length - 1) {
+        [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]]
+      }
+      localStorage.setItem('adminActionsOrder', JSON.stringify(next))
+      return next
+    })
+  }
+
   function handleQuickAction(id: string) {
     if (id === 'add-property') onShowAddPropertyModal()
     else if (id === 'invite-tenant') onShowInviteModal()
@@ -1537,12 +1557,16 @@ function DashboardPanel({
     else if (id === 'schedule') onShowScheduleModal()
   }
 
+  const orderedActions = actionsOrder
+    .map(id => DEFAULT_QUICK_ACTIONS.find(a => a.id === id))
+    .filter(Boolean) as typeof DEFAULT_QUICK_ACTIONS
+
   const kpis = [
-    { label: 'Properties', value: '3', icon: <Building2 className="w-5 h-5" />, trend: null, color: 'text-blue-600 bg-blue-50' },
-    { label: 'Total Units', value: '12', icon: <Home className="w-5 h-5" />, trend: null, color: 'text-purple-600 bg-purple-50' },
-    { label: 'Occupied', value: '11', icon: <Users className="w-5 h-5" />, trend: { text: '↑ 1 from last month', positive: true }, color: 'text-green-600 bg-green-50' },
-    { label: 'Open Tickets', value: '2', icon: <Wrench className="w-5 h-5" />, trend: null, color: 'text-amber-600 bg-amber-50' },
-    { label: 'Monthly Revenue', value: '$14,400', icon: <DollarSign className="w-5 h-5" />, trend: { text: '↑ $400 vs May', positive: true }, color: 'text-emerald-600 bg-emerald-50' },
+    { label: 'Properties', value: '3', icon: <Building2 className="w-5 h-5" />, trend: null, color: 'text-blue-600 bg-blue-50', section: 'overview' },
+    { label: 'Total Units', value: '12', icon: <Home className="w-5 h-5" />, trend: null, color: 'text-purple-600 bg-purple-50', section: 'occupancy' },
+    { label: 'Occupied', value: '11', icon: <Users className="w-5 h-5" />, trend: { text: '↑ 1 from last month', positive: true }, color: 'text-green-600 bg-green-50', section: 'occupancy' },
+    { label: 'Open Tickets', value: '2', icon: <Wrench className="w-5 h-5" />, trend: null, color: 'text-amber-600 bg-amber-50', section: 'maintenance' },
+    { label: 'Monthly Revenue', value: '$14,400', icon: <DollarSign className="w-5 h-5" />, trend: { text: '↑ $400 vs May', positive: true }, color: 'text-emerald-600 bg-emerald-50', section: 'revenue' },
   ]
 
   return (
@@ -1550,7 +1574,11 @@ function DashboardPanel({
       {/* KPI cards */}
       <div className="grid grid-cols-5 gap-4">
         {kpis.map((k) => (
-          <div key={k.label} className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+          <button
+            key={k.label}
+            onClick={() => { setAnalyticsSection(k.section); setActivePanel('analytics') }}
+            className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 text-left hover:shadow-md hover:border-blue-200 transition-all cursor-pointer"
+          >
             <div className="flex items-center justify-between mb-3">
               <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{k.label}</p>
               <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${k.color}`}>
@@ -1563,7 +1591,7 @@ function DashboardPanel({
                 {k.trend.text}
               </p>
             )}
-          </div>
+          </button>
         ))}
       </div>
 
@@ -1632,20 +1660,38 @@ function DashboardPanel({
             </div>
 
             {editQuickActions ? (
-              <div className="space-y-2">
-                {DEFAULT_QUICK_ACTIONS.map((a) => (
+              <div className="space-y-2 animate-fade-in">
+                {orderedActions.map((a, idx) => (
                   <div key={a.id} className="flex items-center justify-between py-1.5">
                     <div className={`flex items-center gap-2 text-sm font-medium ${hiddenActions.has(a.id) ? 'line-through text-gray-300' : 'text-gray-700'}`}>
                       {a.icon}
                       {a.label}
                     </div>
-                    <button
-                      onClick={() => toggleHidden(a.id)}
-                      className="text-gray-400 hover:text-gray-600"
-                      title={hiddenActions.has(a.id) ? 'Show' : 'Hide'}
-                    >
-                      {hiddenActions.has(a.id) ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => moveAction(a.id, 'up')}
+                        disabled={idx === 0}
+                        className="p-0.5 text-gray-400 hover:text-gray-600 disabled:opacity-20"
+                        title="Move up"
+                      >
+                        <ChevronUp className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => moveAction(a.id, 'down')}
+                        disabled={idx === orderedActions.length - 1}
+                        className="p-0.5 text-gray-400 hover:text-gray-600 disabled:opacity-20"
+                        title="Move down"
+                      >
+                        <ChevronDown className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => toggleHidden(a.id)}
+                        className="p-0.5 text-gray-400 hover:text-gray-600"
+                        title={hiddenActions.has(a.id) ? 'Show' : 'Hide'}
+                      >
+                        {hiddenActions.has(a.id) ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
                   </div>
                 ))}
                 <button
@@ -1657,7 +1703,7 @@ function DashboardPanel({
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-2">
-                {DEFAULT_QUICK_ACTIONS.filter((a) => !hiddenActions.has(a.id)).map((a) => (
+                {orderedActions.filter((a) => !hiddenActions.has(a.id)).map((a) => (
                   <button
                     key={a.id}
                     onClick={() => handleQuickAction(a.id)}
@@ -1703,8 +1749,9 @@ interface TenantsPanelProps {
   onViewTenant: (id: string) => void
 }
 
-function TenantsPanel({ tenants, threads, setThreads, setActivePanel, setSelectedThreadId, onShowInviteModal, onEditTenant, onViewTenant }: TenantsPanelProps) {
+function TenantsPanel({ tenants, setTenants, threads, setThreads, setActivePanel, setSelectedThreadId, onShowInviteModal, onEditTenant, onViewTenant }: TenantsPanelProps) {
   const [search, setSearch] = useState('')
+  const [tenantStatusDropdownId, setTenantStatusDropdownId] = useState<string | null>(null)
   const filtered = tenants.filter(
     (t) =>
       t.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -1731,11 +1778,36 @@ function TenantsPanel({ tenants, threads, setThreads, setActivePanel, setSelecte
   }, 0) / tenants.length
   const avgLeaseDays = Math.round(avgLeaseMs / 86400000)
 
-  const statusBadge = (s: string) => {
-    if (s === 'current') return <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-green-100 text-green-700">Current</span>
-    if (s === 'late') return <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-red-100 text-red-700">Late</span>
-    return <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-amber-100 text-amber-700">Notice</span>
+  const statusLabels: Record<string, string> = { current: 'Current', late: 'Late', notice: 'Notice' }
+  const statusColors: Record<string, string> = {
+    current: 'bg-green-100 text-green-700',
+    late: 'bg-red-100 text-red-700',
+    notice: 'bg-amber-100 text-amber-700',
   }
+
+  const statusBadge = (s: string, tenantId: string) => (
+    <div className="relative inline-block">
+      <button
+        onClick={(e) => { e.stopPropagation(); setTenantStatusDropdownId(tenantStatusDropdownId === tenantId ? null : tenantId) }}
+        className={`px-2 py-0.5 text-xs font-semibold rounded-full cursor-pointer ${statusColors[s] || 'bg-gray-100 text-gray-600'}`}
+      >
+        {statusLabels[s] || s}
+      </button>
+      {tenantStatusDropdownId === tenantId && (
+        <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg py-1 z-20 w-28 animate-fade-in">
+          {(['current', 'late', 'notice'] as const).map(st => (
+            <button key={st} onClick={() => {
+              setTenants(prev => prev.map(t => t.id === tenantId ? { ...t, status: st } : t))
+              showToast({ type: 'success', title: `Status updated to ${statusLabels[st]}` })
+              setTenantStatusDropdownId(null)
+            }} className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50">
+              {statusLabels[st]}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
 
   function handleMessage(tenant: Tenant) {
     let thread = threads.find((th) => th.tenantId === tenant.id)
@@ -1844,7 +1916,7 @@ function TenantsPanel({ tenants, threads, setThreads, setActivePanel, setSelecte
                 <td className="px-5 py-3 text-sm text-gray-700">{t.property}</td>
                 <td className="px-5 py-3 text-sm font-semibold text-gray-900">${t.rent.toLocaleString()}</td>
                 <td className="px-5 py-3 text-sm text-gray-600">{t.leaseEnd}</td>
-                <td className="px-5 py-3">{statusBadge(t.status)}</td>
+                <td className="px-5 py-3">{statusBadge(t.status, t.id)}</td>
                 <td className="px-5 py-3">
                   <div className="flex items-center gap-2">
                     <button onClick={() => onEditTenant(t.id)} className="text-xs font-semibold text-gray-600 hover:text-gray-800 border border-gray-200 px-2 py-1 rounded-lg hover:bg-gray-50">
@@ -1908,7 +1980,7 @@ function MaintenancePanel({ tickets, setTickets, onShowNewTicketModal }: Mainten
             {(['open', 'in_progress', 'resolved'] as const).map(st => (
               <button key={st} onClick={() => {
                 setTickets(prev => prev.map(t => t.id === ticketId ? { ...t, status: st } : t))
-                showToast({ type: 'demo', title: `Ticket status updated to ${labels[st]}` })
+                showToast({ type: 'success', title: `Ticket status updated to ${labels[st]}` })
                 setStatusDropdownId(null)
               }} className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50">
                 {labels[st]}
@@ -1922,7 +1994,7 @@ function MaintenancePanel({ tickets, setTickets, onShowNewTicketModal }: Mainten
 
   function markResolved(id: string) {
     setTickets((prev) => prev.map((t) => (t.id === id ? { ...t, status: 'resolved' as const } : t)))
-    showToast({ type: 'demo', title: 'Ticket marked as resolved' })
+    showToast({ type: 'success', title: 'Ticket marked as resolved' })
   }
 
   const filtered = filterStatus === 'all' ? tickets : tickets.filter(t => t.status === filterStatus)
@@ -2087,7 +2159,7 @@ function MaintenancePanel({ tickets, setTickets, onShowNewTicketModal }: Mainten
           onClose={() => setEditTicketId(null)}
           onSave={(updated) => {
             setTickets(prev => prev.map(t => t.id === updated.id ? updated : t))
-            showToast({ type: 'demo', title: `Ticket ${updated.id} updated (demo)` })
+            showToast({ type: 'success', title: `Ticket ${updated.id} updated` })
             setEditTicketId(null)
           }}
         />
@@ -2158,13 +2230,8 @@ function PropertiesPanel({ properties, tenants, tickets, onShowAddPropertyModal,
                   <p className="text-xs text-gray-500">{p.city}</p>
                 </div>
                 <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${occupancyPct === 100 ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
-                  {occupancyPct}% occupied
+                  {p.occupied}/{p.units} occupied
                 </span>
-              </div>
-
-              {/* Progress bar */}
-              <div className="w-full h-2 bg-gray-100 rounded-full mb-4">
-                <div className="h-full bg-blue-500 rounded-full transition-all" style={{ width: `${occupancyPct}%` }} />
               </div>
 
               {/* Stats row */}
@@ -2210,7 +2277,7 @@ function PropertiesPanel({ properties, tenants, tickets, onShowAddPropertyModal,
                   Manage
                 </button>
                 <button
-                  onClick={() => showToast({ type: 'demo', title: `Viewing tickets for ${p.name}` })}
+                  onClick={() => showToast({ type: 'info', title: `Viewing tickets for ${p.name}` })}
                   className="flex-1 border border-gray-200 hover:bg-gray-50 text-gray-700 text-sm font-semibold py-2 rounded-xl transition-colors"
                 >
                   View Tickets
@@ -2231,18 +2298,41 @@ interface DocEntry {
   type: string
   date: string
   size: string
+  property?: string
+  unit?: string
+  tenantName?: string
+  tenantPhone?: string
 }
 
 function DocumentsPanel() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [docs, setDocs] = useState<DocEntry[]>([
-    { name: 'Lease Agreement — Sarah Mitchell', type: 'Lease', date: 'Jan 1, 2026', size: '245 KB' },
-    { name: 'Lease Agreement — Robert Kim', type: 'Lease', date: 'Dec 1, 2025', size: '238 KB' },
-    { name: 'Property Insurance — 14 Oakwood Dr', type: 'Insurance', date: 'Mar 15, 2026', size: '1.2 MB' },
-    { name: 'Inspection Report — Q1 2026', type: 'Report', date: 'Apr 2, 2026', size: '3.4 MB' },
+    { name: 'Lease Agreement — Sarah Mitchell', type: 'Lease', date: 'Jan 1, 2026', size: '245 KB', property: '820 Maple Ave', unit: '4B', tenantName: 'Sarah Mitchell', tenantPhone: '+1 (512) 555-0101' },
+    { name: 'Lease Agreement — Robert Kim', type: 'Lease', date: 'Dec 1, 2025', size: '238 KB', property: '820 Maple Ave', unit: '2A', tenantName: 'Robert Kim', tenantPhone: '+1 (512) 555-0105' },
+    { name: 'Property Insurance — 14 Oakwood Dr', type: 'Insurance', date: 'Mar 15, 2026', size: '1.2 MB', property: '14 Oakwood Dr' },
+    { name: 'Inspection Report — Q1 2026', type: 'Report', date: 'Apr 2, 2026', size: '3.4 MB', property: 'All Properties' },
     { name: 'HOA Rules & Regulations', type: 'Policy', date: 'Jan 1, 2026', size: '189 KB' },
   ])
   const [viewingDoc, setViewingDoc] = useState<string | null>(null)
+  const [docSearch, setDocSearch] = useState('')
+  const [filterProperty, setFilterProperty] = useState('')
+  const [filterUnit, setFilterUnit] = useState('')
+  const [filterTenant, setFilterTenant] = useState('')
+
+  const uniqueProperties = Array.from(new Set(docs.map(d => d.property).filter(Boolean))) as string[]
+  const uniqueUnits = Array.from(new Set(docs.map(d => d.unit).filter(Boolean))) as string[]
+  const uniqueTenants = Array.from(new Set(docs.map(d => d.tenantName).filter(Boolean))) as string[]
+
+  const filteredDocs = docs.filter(d => {
+    const q = docSearch.toLowerCase()
+    const matchesSearch = !q || d.name.toLowerCase().includes(q) ||
+      (d.tenantName?.toLowerCase().includes(q) ?? false) ||
+      (d.tenantPhone?.toLowerCase().includes(q) ?? false)
+    const matchesProp = !filterProperty || d.property === filterProperty
+    const matchesUnit = !filterUnit || d.unit === filterUnit
+    const matchesTenant = !filterTenant || d.tenantName === filterTenant
+    return matchesSearch && matchesProp && matchesUnit && matchesTenant
+  })
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -2251,14 +2341,14 @@ function DocumentsPanel() {
       const sizeKB = Math.round(file.size / 1024)
       const sizeStr = sizeKB > 1024 ? `${(sizeKB / 1024).toFixed(1)} MB` : `${sizeKB} KB`
       setDocs((prev) => [{ name: file.name, type: 'Document', date: today, size: sizeStr }, ...prev])
-      showToast({ type: 'demo', title: `"${file.name}" uploaded (demo)` })
+      showToast({ type: 'success', title: `"${file.name}" uploaded` })
     }
     e.target.value = ''
   }
 
   return (
-    <div className="p-6 animate-slide-up">
-      <div className="flex items-center justify-between mb-5">
+    <div className="p-6 animate-slide-up space-y-4">
+      <div className="flex items-center justify-between">
         <h2 className="text-lg font-bold text-gray-900">Documents</h2>
         <button
           onClick={() => fileInputRef.current?.click()}
@@ -2268,11 +2358,41 @@ function DocumentsPanel() {
         </button>
         <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileChange} />
       </div>
+
+      {/* Search + Filters */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="relative flex-1 min-w-[200px]">
+          <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <input
+            className="pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 w-full"
+            placeholder="Search name, tenant, phone…"
+            value={docSearch}
+            onChange={e => setDocSearch(e.target.value)}
+          />
+        </div>
+        <select value={filterProperty} onChange={e => setFilterProperty(e.target.value)}
+          className="px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+          <option value="">All Properties</option>
+          {uniqueProperties.map(p => <option key={p} value={p}>{p}</option>)}
+        </select>
+        <select value={filterUnit} onChange={e => setFilterUnit(e.target.value)}
+          className="px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+          <option value="">All Units</option>
+          {uniqueUnits.map(u => <option key={u} value={u}>{u}</option>)}
+        </select>
+        <select value={filterTenant} onChange={e => setFilterTenant(e.target.value)}
+          className="px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+          <option value="">All Tenants</option>
+          {uniqueTenants.map(t => <option key={t} value={t}>{t}</option>)}
+        </select>
+      </div>
+
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
         <table className="w-full">
           <thead>
             <tr className="border-b border-gray-100">
               <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Name</th>
+              <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Tenant</th>
               <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Type</th>
               <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Date</th>
               <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Size</th>
@@ -2280,13 +2400,24 @@ function DocumentsPanel() {
             </tr>
           </thead>
           <tbody>
-            {docs.map((d, i) => (
+            {filteredDocs.map((d, i) => (
               <tr key={i} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
                 <td className="px-5 py-3">
                   <div className="flex items-center gap-2">
                     <FileText className="w-4 h-4 text-gray-400" />
-                    <span className="text-sm font-medium text-gray-900">{d.name}</span>
+                    <div>
+                      <span className="text-sm font-medium text-gray-900">{d.name}</span>
+                      {d.property && <p className="text-xs text-gray-400">{d.property}{d.unit ? ` · Unit ${d.unit}` : ''}</p>}
+                    </div>
                   </div>
+                </td>
+                <td className="px-5 py-3">
+                  {d.tenantName ? (
+                    <div>
+                      <p className="text-sm text-gray-700">{d.tenantName}</p>
+                      <p className="text-xs text-gray-400">{d.tenantPhone}</p>
+                    </div>
+                  ) : <span className="text-xs text-gray-400">—</span>}
                 </td>
                 <td className="px-5 py-3">
                   <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-gray-100 text-gray-600">{d.type}</span>
@@ -2563,7 +2694,7 @@ function TenantProfileModal({ tenant, tickets, onClose, onMessage }: { tenant: T
                       <p className="text-xs text-gray-400">{d.type} · {d.date}</p>
                     </div>
                   </div>
-                  <button onClick={() => showToast({ type: 'demo', title: `Opening ${d.name} (demo)` })} className="text-xs font-semibold text-blue-600 hover:text-blue-700">View</button>
+                  <button onClick={() => showToast({ type: 'info', title: `Opening ${d.name}` })} className="text-xs font-semibold text-blue-600 hover:text-blue-700">View</button>
                 </div>
               ))}
             </div>
@@ -2851,12 +2982,396 @@ function NewThreadModal({ tenants, threads, onClose, onSelect, onCreateThread }:
   )
 }
 
+// ─── Analytics Panel ─────────────────────────────────────────────────────────
+
+interface AnalyticsPanelProps {
+  initialSection?: string
+}
+
+function AnalyticsPanel({ initialSection = 'overview' }: AnalyticsPanelProps) {
+  const [subSection, setSubSection] = useState<'overview' | 'occupancy' | 'revenue' | 'maintenance'>(
+    (initialSection as 'overview' | 'occupancy' | 'revenue' | 'maintenance') || 'overview'
+  )
+
+  const tabs = [
+    { id: 'overview', label: 'Overview' },
+    { id: 'occupancy', label: 'Occupancy' },
+    { id: 'revenue', label: 'Revenue' },
+    { id: 'maintenance', label: 'Maintenance' },
+  ] as const
+
+  const totalRevenue = revenueData.reduce((s, d) => s + d.revenue, 0)
+  const totalExpenses = revenueData.reduce((s, d) => s + d.expenses, 0)
+  const noi = totalRevenue - totalExpenses
+  const ytdRevenue = revenueData.reduce((s, d) => s + d.revenue, 0)
+
+  const occupancyByProperty = [
+    { property: '14 Oakwood Drive', units: 4, occupied: 4, pct: 100 },
+    { property: '7 Maple Lane', units: 4, occupied: 4, pct: 100 },
+    { property: '12 Elmwood Court', units: 4, occupied: 3, pct: 75 },
+  ]
+
+  const highestUnits = [
+    { unit: 'Unit 4B', count: 3 },
+    { unit: 'Unit 2A', count: 2 },
+    { unit: 'Unit 3A', count: 2 },
+    { unit: 'Unit 1B', count: 1 },
+    { unit: '1 Elmwood', count: 1 },
+  ]
+
+  return (
+    <div className="p-6 space-y-5 animate-slide-up">
+      <div>
+        <h2 className="text-lg font-bold text-gray-900">Analytics</h2>
+        <p className="text-xs text-gray-500">Portfolio performance overview</p>
+      </div>
+
+      {/* Sub-nav tabs */}
+      <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
+        {tabs.map(t => (
+          <button key={t.id} onClick={() => setSubSection(t.id)}
+            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${subSection === t.id ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Overview */}
+      {subSection === 'overview' && (
+        <div className="space-y-5">
+          <div className="grid grid-cols-4 gap-4">
+            {[
+              { label: 'Total Units', value: '12', color: 'text-blue-600 bg-blue-50', icon: <Home className="w-5 h-5" /> },
+              { label: 'Occupied', value: '11/12', color: 'text-green-600 bg-green-50', icon: <Users className="w-5 h-5" /> },
+              { label: 'Avg Occupancy', value: '91.7%', color: 'text-purple-600 bg-purple-50', icon: <TrendingUp className="w-5 h-5" /> },
+              { label: 'Monthly Revenue', value: '$14,400', color: 'text-emerald-600 bg-emerald-50', icon: <DollarSign className="w-5 h-5" /> },
+            ].map(k => (
+              <div key={k.label} className="bg-white rounded-xl border border-gray-200 p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{k.label}</p>
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${k.color}`}>{k.icon}</div>
+                </div>
+                <p className="text-2xl font-bold text-gray-900">{k.value}</p>
+              </div>
+            ))}
+          </div>
+          <div className="grid grid-cols-2 gap-5">
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+              <h3 className="text-sm font-semibold text-gray-900 mb-4">Occupancy Trend (6 months)</h3>
+              <ResponsiveContainer width="100%" height={180}>
+                <AreaChart data={occupancyData}>
+                  <defs>
+                    <linearGradient id="occGrad2" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#2563EB" stopOpacity={0.15} />
+                      <stop offset="95%" stopColor="#2563EB" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
+                  <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
+                  <YAxis domain={[75, 100]} tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} unit="%" />
+                  <Tooltip formatter={(v) => [`${v}%`, 'Occupancy']} contentStyle={{ borderRadius: 8, border: '1px solid #E5E7EB', fontSize: 12 }} />
+                  <Area type="monotone" dataKey="rate" stroke="#2563EB" strokeWidth={2} fill="url(#occGrad2)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+              <h3 className="text-sm font-semibold text-gray-900 mb-4">Recent Activity</h3>
+              <div className="space-y-3">
+                {activityFeed.slice(0, 5).map((a) => (
+                  <div key={a.id} className="flex items-start gap-3">
+                    <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${
+                      a.type === 'payment' ? 'bg-green-100 text-green-600' :
+                      a.type === 'ticket' ? 'bg-amber-100 text-amber-600' :
+                      'bg-blue-100 text-blue-600'
+                    }`}>
+                      {a.type === 'payment' ? <DollarSign className="w-3.5 h-3.5" /> :
+                       a.type === 'ticket' ? <Wrench className="w-3.5 h-3.5" /> :
+                       <FileText className="w-3.5 h-3.5" />}
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm text-gray-900">{a.text}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">{a.time}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Occupancy */}
+      {subSection === 'occupancy' && (
+        <div className="space-y-5">
+          <div className="grid grid-cols-3 gap-4">
+            {[
+              { label: 'Overall Occupancy', value: '91.7%', sub: '11 of 12 units' },
+              { label: 'Vacant Units', value: '1', sub: '12 Elmwood Court' },
+              { label: 'Avg Occupancy (6mo)', value: '90.3%', sub: 'Jan–Jun 2026' },
+            ].map(k => (
+              <div key={k.label} className="bg-white rounded-xl border border-gray-200 p-4">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">{k.label}</p>
+                <p className="text-2xl font-bold text-gray-900">{k.value}</p>
+                <p className="text-xs text-gray-400 mt-0.5">{k.sub}</p>
+              </div>
+            ))}
+          </div>
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+            <h3 className="text-sm font-semibold text-gray-900 mb-4">Occupancy Trend (6 months)</h3>
+            <ResponsiveContainer width="100%" height={200}>
+              <AreaChart data={occupancyData}>
+                <defs>
+                  <linearGradient id="occGrad3" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#2563EB" stopOpacity={0.15} />
+                    <stop offset="95%" stopColor="#2563EB" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
+                <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
+                <YAxis domain={[70, 100]} tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} unit="%" />
+                <Tooltip formatter={(v) => [`${v}%`, 'Occupancy']} contentStyle={{ borderRadius: 8, border: '1px solid #E5E7EB', fontSize: 12 }} />
+                <Area type="monotone" dataKey="rate" stroke="#2563EB" strokeWidth={2} fill="url(#occGrad3)" />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+            <div className="px-5 py-3 border-b border-gray-100">
+              <h3 className="text-sm font-semibold text-gray-900">Occupancy by Property</h3>
+            </div>
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-gray-100">
+                  {['Property', 'Units', 'Occupied', 'Vacant', 'Rate'].map(h => (
+                    <th key={h} className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {occupancyByProperty.map(p => (
+                  <tr key={p.property} className="border-b border-gray-50 hover:bg-gray-50">
+                    <td className="px-5 py-3 text-sm font-medium text-gray-900">{p.property}</td>
+                    <td className="px-5 py-3 text-sm text-gray-700">{p.units}</td>
+                    <td className="px-5 py-3 text-sm text-gray-700">{p.occupied}</td>
+                    <td className="px-5 py-3 text-sm text-gray-700">{p.units - p.occupied}</td>
+                    <td className="px-5 py-3">
+                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${p.pct === 100 ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                        {p.pct}%
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Revenue */}
+      {subSection === 'revenue' && (
+        <div className="space-y-5">
+          <div className="grid grid-cols-4 gap-4">
+            {[
+              { label: 'YTD Revenue', value: `$${ytdRevenue.toLocaleString()}`, color: 'text-blue-600' },
+              { label: 'Total Expenses', value: `$${totalExpenses.toLocaleString()}`, color: 'text-red-500' },
+              { label: 'Net Operating Income', value: `$${noi.toLocaleString()}`, color: 'text-green-600' },
+              { label: 'NOI Margin', value: `${Math.round((noi / totalRevenue) * 100)}%`, color: 'text-emerald-600' },
+            ].map(c => (
+              <div key={c.label} className="bg-white rounded-xl border border-gray-200 p-4">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">{c.label}</p>
+                <p className={`text-2xl font-bold ${c.color}`}>{c.value}</p>
+              </div>
+            ))}
+          </div>
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+            <h3 className="text-sm font-semibold text-gray-900 mb-4">Monthly Revenue vs Expenses</h3>
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={revenueData} barGap={4}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
+                <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
+                <Tooltip formatter={(v) => [`$${Number(v).toLocaleString()}`, '']} contentStyle={{ borderRadius: 8, border: '1px solid #E5E7EB', fontSize: 12 }} />
+                <Bar dataKey="revenue" fill="#2563EB" radius={[4,4,0,0]} name="Revenue" />
+                <Bar dataKey="expenses" fill="#E5E7EB" radius={[4,4,0,0]} name="Expenses" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+            <div className="px-5 py-3 border-b border-gray-100">
+              <h3 className="text-sm font-semibold text-gray-900">Revenue by Property</h3>
+            </div>
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-gray-100">
+                  {['Property', 'Units', 'Occupied', 'Monthly Income', 'Per Unit'].map(h => (
+                    <th key={h} className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {[
+                  { name: '14 Oakwood Drive', units: 4, occupied: 4, income: 5800 },
+                  { name: '7 Maple Lane', units: 4, occupied: 4, income: 5900 },
+                  { name: '12 Elmwood Court', units: 4, occupied: 3, income: 4200 },
+                ].map(p => (
+                  <tr key={p.name} className="border-b border-gray-50 hover:bg-gray-50">
+                    <td className="px-5 py-3 text-sm font-medium text-gray-900">{p.name}</td>
+                    <td className="px-5 py-3 text-sm text-gray-700">{p.units}</td>
+                    <td className="px-5 py-3 text-sm text-gray-700">{p.occupied}</td>
+                    <td className="px-5 py-3 text-sm font-semibold text-green-600">${p.income.toLocaleString()}</td>
+                    <td className="px-5 py-3 text-sm text-gray-600">${Math.round(p.income / p.occupied).toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Maintenance */}
+      {subSection === 'maintenance' && (
+        <div className="space-y-5">
+          <div className="grid grid-cols-4 gap-4">
+            {[
+              { label: 'Total (All Time)', value: '9', color: 'text-blue-600 bg-blue-50', icon: <BarChart2 className="w-4 h-4" /> },
+              { label: 'Open', value: '2', color: 'text-amber-600 bg-amber-50', icon: <Wrench className="w-4 h-4" /> },
+              { label: 'Avg Resolution', value: '3.2d', color: 'text-green-600 bg-green-50', icon: <TrendingUp className="w-4 h-4" /> },
+              { label: 'Cost This Month', value: '$340', color: 'text-purple-600 bg-purple-50', icon: <DollarSign className="w-4 h-4" /> },
+            ].map(k => (
+              <div key={k.label} className="bg-white rounded-xl border border-gray-200 p-4 flex items-center gap-3">
+                <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${k.color}`}>{k.icon}</div>
+                <div>
+                  <p className="text-xs text-gray-500">{k.label}</p>
+                  <p className="text-xl font-bold text-gray-900">{k.value}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="grid grid-cols-3 gap-4">
+            <div className="bg-white rounded-xl border border-gray-200 p-5">
+              <h4 className="text-sm font-semibold text-gray-900 mb-3">Tickets by Month</h4>
+              <ResponsiveContainer width="100%" height={160}>
+                <BarChart data={ticketsByMonth}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
+                  <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
+                  <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #E5E7EB', fontSize: 12 }} />
+                  <Bar dataKey="count" fill="#2563EB" radius={[4,4,0,0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="bg-white rounded-xl border border-gray-200 p-5">
+              <h4 className="text-sm font-semibold text-gray-900 mb-3">By Issue Type</h4>
+              <ResponsiveContainer width="100%" height={160}>
+                <PieChart>
+                  <Pie data={ticketsByType} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={60}>
+                    {ticketsByType.map((entry, i) => <Cell key={i} fill={entry.fill} />)}
+                  </Pie>
+                  <Legend iconSize={10} wrapperStyle={{ fontSize: 11 }} />
+                  <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #E5E7EB', fontSize: 12 }} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="bg-white rounded-xl border border-gray-200 p-5">
+              <h4 className="text-sm font-semibold text-gray-900 mb-3">Highest Maintenance Units</h4>
+              <div className="space-y-2">
+                {highestUnits.map((u, i) => (
+                  <div key={u.unit} className={`flex items-center justify-between py-1.5 px-2 rounded-lg ${i === 0 ? 'bg-amber-50' : ''}`}>
+                    <span className={`text-sm font-medium ${i === 0 ? 'text-amber-700' : 'text-gray-700'}`}>{u.unit}</span>
+                    <span className={`text-xs font-bold ${i === 0 ? 'text-amber-600' : 'text-gray-500'}`}>{u.count} ticket{u.count !== 1 ? 's' : ''}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Bug Report Modal ─────────────────────────────────────────────────────────
+
+function BugReportModal({ onClose }: { onClose: () => void }) {
+  const [form, setForm] = useState({
+    category: '',
+    subject: '',
+    description: '',
+    steps: '',
+    severity: 'Medium',
+  })
+
+  function handleSubmit() {
+    if (!form.subject.trim() || !form.description.trim()) {
+      showToast({ type: 'error', title: 'Please fill in Subject and Description' })
+      return
+    }
+    showToast({ type: 'success', title: 'Bug report submitted — thank you!' })
+    onClose()
+  }
+
+  return (
+    <ModalBackdrop onClose={onClose}>
+      <div className="bg-white rounded-xl border border-gray-200 shadow-lg w-full max-w-lg max-h-[90vh] overflow-y-auto animate-scale-in">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <h2 className="text-lg font-bold text-gray-900">Report a Bug</h2>
+          <button onClick={onClose} className="w-8 h-8 rounded-lg bg-gray-100 hover:bg-gray-200 flex items-center justify-center"><X className="w-4 h-4" /></button>
+        </div>
+        <div className="p-6 space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Category</label>
+            <select value={form.category} onChange={e => setForm({...form, category: e.target.value})}
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+              <option value="">Select category…</option>
+              {['UI/UX Bug', 'Data Issue', 'Performance', 'Feature Request', 'Other'].map(o => <option key={o}>{o}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Subject *</label>
+            <input value={form.subject} onChange={e => setForm({...form, subject: e.target.value})}
+              placeholder="Brief description of the issue"
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Description *</label>
+            <textarea value={form.description} onChange={e => setForm({...form, description: e.target.value})}
+              rows={4} placeholder="Describe what happened and what you expected to happen…"
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Steps to Reproduce</label>
+            <textarea value={form.steps} onChange={e => setForm({...form, steps: e.target.value})}
+              rows={3} placeholder="1. Click on...\n2. Then..."
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Severity</label>
+            <div className="flex gap-2">
+              {['Low', 'Medium', 'High', 'Critical'].map(s => (
+                <button key={s} onClick={() => setForm({...form, severity: s})}
+                  className={`flex-1 py-2 rounded-xl text-sm font-semibold border transition-colors ${form.severity === s ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="flex gap-3 pt-2">
+            <button onClick={onClose} className="flex-1 border border-gray-200 hover:bg-gray-50 text-gray-700 font-semibold py-2.5 rounded-xl text-sm transition-colors">Cancel</button>
+            <button onClick={handleSubmit} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors">Submit Report</button>
+          </div>
+        </div>
+      </div>
+    </ModalBackdrop>
+  )
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function AdminPortal() {
   const navigate = useNavigate()
   const [activePanel, setActivePanel] = useState('dashboard')
   const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [analyticsSection, setAnalyticsSection] = useState('overview')
+  const [showBugModal, setShowBugModal] = useState(false)
 
   // Shared state lifted to root
   const [tenants, setTenants] = useState<Tenant[]>(initialTenants)
@@ -2923,6 +3438,7 @@ export default function AdminPortal() {
     { id: 'properties', label: 'Properties', icon: <Building2 className="w-5 h-5" /> },
     { id: 'tenants', label: 'Tenants', icon: <Users className="w-5 h-5" /> },
     { id: 'maintenance', label: 'Maintenance', icon: <Wrench className="w-5 h-5" />, badge: openTicketCount },
+    { id: 'analytics', label: 'Analytics', icon: <BarChart2 className="w-5 h-5" /> },
     { id: 'messages', label: 'Messages', icon: <MessageSquare className="w-5 h-5" />, badge: unreadMessages },
     { id: 'documents', label: 'Documents', icon: <FileText className="w-5 h-5" /> },
   ]
@@ -2933,6 +3449,7 @@ export default function AdminPortal() {
         return (
           <DashboardPanel
             setActivePanel={setActivePanel}
+            setAnalyticsSection={setAnalyticsSection}
             onShowInviteModal={() => setShowInviteModal(true)}
             onShowAddPropertyModal={() => setShowAddPropertyModal(true)}
             onShowReportModal={() => setShowReportModal(true)}
@@ -2942,6 +3459,8 @@ export default function AdminPortal() {
             properties={propertiesList}
           />
         )
+      case 'analytics':
+        return <AnalyticsPanel initialSection={analyticsSection} />
       case 'properties':
         return (
           <PropertiesPanel
@@ -3111,11 +3630,19 @@ export default function AdminPortal() {
         <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between shrink-0">
           <div>
             <h1 className="text-lg font-bold text-gray-900 capitalize">
-              {activePanel === 'settings' ? 'Settings' : activePanel === 'dashboard' ? 'Dashboard' : activePanel}
+              {activePanel === 'settings' ? 'Settings' : activePanel === 'dashboard' ? 'Dashboard' : activePanel === 'analytics' ? 'Analytics' : activePanel}
             </h1>
             <p className="text-xs text-gray-500">BMP Central · Admin Portal</p>
           </div>
           <div className="flex items-center gap-3">
+            {/* Bug Report */}
+            <button
+              onClick={() => setShowBugModal(true)}
+              className="w-9 h-9 rounded-xl bg-gray-50 hover:bg-gray-100 flex items-center justify-center transition-colors"
+              title="Report a bug"
+            >
+              <HelpCircle className="w-5 h-5 text-gray-500" />
+            </button>
             {/* Bell */}
             <div className="relative" ref={notifRef}>
               <button
@@ -3171,7 +3698,7 @@ export default function AdminPortal() {
                   </div>
                   <div className="px-4 py-2 border-t border-gray-100">
                     <button
-                      onClick={() => { showToast({ type: 'demo', title: 'View all notifications (demo)' }); setShowNotifs(false) }}
+                      onClick={() => { showToast({ type: 'info', title: 'View all notifications' }); setShowNotifs(false) }}
                       className="text-xs text-blue-600 hover:text-blue-700 font-semibold w-full text-center py-1"
                     >
                       View all notifications
@@ -3218,7 +3745,7 @@ export default function AdminPortal() {
                       <Settings className="w-4 h-4 text-gray-400" /> Settings
                     </button>
                     <button
-                      onClick={() => { showToast({ type: 'demo', title: 'Opening help center…' }); setShowProfileMenu(false) }}
+                      onClick={() => { showToast({ type: 'info', title: 'Opening help center…' }); setShowProfileMenu(false) }}
                       className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
                     >
                       <HelpCircle className="w-4 h-4 text-gray-400" /> Help & Support
@@ -3311,7 +3838,7 @@ export default function AdminPortal() {
           onClose={() => setManagePropertyId(null)}
           onUpdateProperty={(updated) => {
             setPropertiesList(prev => prev.map(p => p.id === updated.id ? updated : p))
-            showToast({ type: 'demo', title: `Property "${updated.name}" updated (demo)` })
+            showToast({ type: 'success', title: `Property "${updated.name}" updated` })
           }}
           onShowNewTicket={() => { setManagePropertyId(null); setShowNewTicketModal(true) }}
           setActivePanel={setActivePanel}
@@ -3326,7 +3853,7 @@ export default function AdminPortal() {
           onClose={() => setEditTenantId(null)}
           onSave={(updated) => {
             setTenants(prev => prev.map(t => t.id === updated.id ? updated : t))
-            showToast({ type: 'demo', title: `Tenant "${updated.name}" updated (demo)` })
+            showToast({ type: 'success', title: `Tenant "${updated.name}" updated` })
             setEditTenantId(null)
           }}
         />
@@ -3374,6 +3901,7 @@ export default function AdminPortal() {
           </div>
         </ModalBackdrop>
       )}
+      {showBugModal && <BugReportModal onClose={() => setShowBugModal(false)} />}
     </div>
   )
 }

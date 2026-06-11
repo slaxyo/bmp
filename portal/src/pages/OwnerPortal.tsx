@@ -192,7 +192,7 @@ function PropertyManageModal({ property, onClose }: { property: Property; onClos
                 />
               </div>
               <button
-                onClick={() => showToast({ type: 'demo', title: `Settings saved for ${property.address} (demo)` })}
+                onClick={() => showToast({ type: 'success', title: `Settings saved for ${property.address}` })}
                 className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 px-6 rounded-xl text-sm transition-colors"
               >
                 Save Settings
@@ -366,13 +366,13 @@ function OwnerReportModal({ report, onClose }: { report: ReportData; onClose: ()
           {reportContent[report.id] ?? <p className="text-sm text-gray-500">Report data not available.</p>}
           <div className="flex gap-3 mt-6">
             <button
-              onClick={() => showToast({ type: 'demo', title: 'Print report (demo)' })}
+              onClick={() => showToast({ type: 'info', title: 'Print report' })}
               className="flex-1 border border-gray-200 hover:bg-gray-50 text-gray-700 font-semibold py-2.5 rounded-xl text-sm transition-colors"
             >
               Print
             </button>
             <button
-              onClick={() => showToast({ type: 'demo', title: 'PDF download (demo)' })}
+              onClick={() => showToast({ type: 'info', title: 'PDF download' })}
               className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors"
             >
               Download PDF
@@ -391,18 +391,24 @@ function OverviewTab() {
   return (
     <div className="p-6 space-y-6">
       {/* Greeting + health */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5 flex items-center justify-between">
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-bold text-gray-900">Good morning, James</h2>
-          <p className="text-sm text-gray-500 mt-0.5">Tuesday, June 10, 2026 · Austin, TX</p>
-          <p className="text-xs text-gray-400 mt-2">Your portfolio is performing well. 11 of 12 units occupied.</p>
+          <h2 className="text-2xl font-bold text-gray-900">Good morning, James</h2>
+          <p className="text-sm text-gray-500 mt-1">Tuesday, June 10, 2026 · Austin, TX</p>
+          <p className="text-sm text-gray-400 mt-2">Your portfolio is performing well. 11 of 12 units occupied.</p>
         </div>
-        <PortfolioHealthArc score={87} />
+        <div className="flex flex-col items-center">
+          <PortfolioHealthArc score={87} />
+          <div className="flex gap-3 mt-2 text-xs">
+            <span className="flex items-center gap-1 text-gray-500"><span className="w-2 h-2 rounded-full bg-gray-200 inline-block" /> Track</span>
+            <span className="flex items-center gap-1 text-blue-600 font-semibold"><span className="w-2 h-2 rounded-full bg-blue-600 inline-block" /> Score</span>
+          </div>
+        </div>
       </div>
 
       {/* Alerts */}
       <div className="space-y-3">
-        <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">Alerts</h3>
+        <h3 className="text-base font-bold text-gray-800">Alerts</h3>
         {[
           {
             title: 'Lease Expiring Soon',
@@ -432,7 +438,7 @@ function OverviewTab() {
       {/* Two column: activity + upcoming */}
       <div className="grid grid-cols-2 gap-5">
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
-          <h3 className="text-sm font-semibold text-gray-900 mb-4">Recent Activity</h3>
+          <h3 className="text-base font-bold text-gray-900 mb-4">Recent Activity</h3>
           <div className="space-y-3">
             {activityFeed.slice(0, 5).map((a) => (
               <div key={a.id} className="flex items-start gap-3">
@@ -447,7 +453,7 @@ function OverviewTab() {
         </div>
 
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
-          <h3 className="text-sm font-semibold text-gray-900 mb-4">Upcoming</h3>
+          <h3 className="text-base font-bold text-gray-900 mb-4">Upcoming</h3>
           <div className="space-y-3">
             {[
               { icon: <Calendar className="w-4 h-4 text-blue-500" />, title: 'Lease Renewal — Robert Kim', sub: 'Due Jun 30, 2026', bg: 'bg-blue-50' },
@@ -589,7 +595,7 @@ function FinancialsTab() {
       <div className="grid grid-cols-5 gap-5">
         {/* Revenue chart */}
         <div className="col-span-3 bg-white rounded-xl border border-gray-200 shadow-sm p-5">
-          <h3 className="text-sm font-semibold text-gray-900 mb-4">Monthly Revenue vs Expenses</h3>
+          <h3 className="text-base font-bold text-gray-900 mb-4">Monthly Revenue vs Expenses</h3>
           <ResponsiveContainer width="100%" height={200}>
             <BarChart data={revenueData} barGap={4}>
               <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
@@ -604,7 +610,7 @@ function FinancialsTab() {
 
         {/* Expense breakdown */}
         <div className="col-span-2 bg-white rounded-xl border border-gray-200 shadow-sm p-5">
-          <h3 className="text-sm font-semibold text-gray-900 mb-4">Expense Breakdown</h3>
+          <h3 className="text-base font-bold text-gray-900 mb-4">Expense Breakdown</h3>
           <ResponsiveContainer width="100%" height={160}>
             <PieChart>
               <Pie
@@ -635,12 +641,12 @@ function FinancialsTab() {
       {/* NOI cards */}
       <div className="grid grid-cols-4 gap-4">
         {[
-          { label: 'Gross Revenue', value: `$${totalRevenue.toLocaleString()}`, color: 'text-blue-600' },
-          { label: 'Total Expenses', value: `$${totalExpenses.toLocaleString()}`, color: 'text-red-500' },
-          { label: 'Net Operating Income', value: `$${noi.toLocaleString()}`, color: 'text-green-600' },
-          { label: 'YoY Revenue Growth', value: '↑ 9.1%', color: 'text-green-600', sub: 'vs June 2025' },
+          { label: 'Gross Revenue', value: `$${totalRevenue.toLocaleString()}`, color: 'text-blue-600', bg: 'bg-white' },
+          { label: 'Total Expenses', value: `$${totalExpenses.toLocaleString()}`, color: 'text-red-500', bg: 'bg-white' },
+          { label: 'Net Operating Income', value: `$${noi.toLocaleString()}`, color: 'text-green-600', bg: 'bg-blue-50 border-blue-100' },
+          { label: 'YoY Revenue Growth', value: '↑ 9.1%', color: 'text-green-600', bg: 'bg-white', sub: 'vs June 2025' },
         ].map((c) => (
-          <div key={c.label} className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+          <div key={c.label} className={`rounded-xl border border-gray-200 shadow-sm p-4 ${c.bg}`}>
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{c.label}</p>
             <p className={`text-2xl font-bold mt-1 ${c.color}`}>{c.value}</p>
             {c.sub && <p className="text-xs text-gray-400 mt-0.5">{c.sub}</p>}
@@ -651,7 +657,7 @@ function FinancialsTab() {
       {/* Cash flow table */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
         <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-          <h3 className="font-semibold text-gray-900">6-Month Cash Flow Summary</h3>
+          <h3 className="text-base font-bold text-gray-900">6-Month Cash Flow Summary</h3>
           <button
             onClick={handleExportCSV}
             className="flex items-center gap-2 text-sm font-semibold text-blue-600 hover:text-blue-700"
@@ -851,7 +857,7 @@ function ReportsTab() {
           <button
             onClick={() => {
               setAutoSchedule(!autoSchedule)
-              showToast({ type: 'demo', title: `Monthly auto-send ${!autoSchedule ? 'enabled' : 'disabled'}` })
+              showToast({ type: 'success', title: `Monthly auto-send ${!autoSchedule ? 'enabled' : 'disabled'}` })
             }}
             className={`relative w-10 h-6 rounded-full transition-colors ${autoSchedule ? 'bg-blue-600' : 'bg-gray-200'}`}
           >
@@ -867,7 +873,7 @@ function ReportsTab() {
             className={`w-full max-w-sm px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 ${!autoSchedule ? 'opacity-50 cursor-not-allowed bg-gray-50' : ''}`}
           />
           <button
-            onClick={() => showToast({ type: 'demo', title: 'Report email settings saved' })}
+            onClick={() => showToast({ type: 'success', title: 'Report email settings saved' })}
             className="mt-3 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-colors"
           >
             Save
@@ -894,11 +900,11 @@ export default function OwnerPortal() {
   ]
 
   const summaryStats = [
-    { label: 'Properties', value: '3' },
-    { label: 'Units', value: '12' },
-    { label: 'Occupied', value: '11/12' },
-    { label: 'Monthly Revenue', value: '$14,400' },
-    { label: 'Open Tickets', value: '2' },
+    { label: 'Properties', value: '3', color: 'text-blue-600' },
+    { label: 'Units', value: '12', color: 'text-purple-600' },
+    { label: 'Occupied', value: '11/12', color: 'text-green-600' },
+    { label: 'Monthly Revenue', value: '$14,400', color: 'text-emerald-600' },
+    { label: 'Open Tickets', value: '2', color: 'text-amber-600' },
   ]
 
   return (
@@ -906,47 +912,47 @@ export default function OwnerPortal() {
       {/* Header */}
       <header className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between sticky top-0 z-30">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-blue-600 rounded-xl flex items-center justify-center">
-            <Building2 className="w-4 h-4 text-white" />
+          <div className="w-9 h-9 bg-blue-600 rounded-xl flex items-center justify-center shadow-sm">
+            <Building2 className="w-5 h-5 text-white" />
           </div>
           <div>
-            <p className="font-bold text-gray-900 text-sm">BMP Central</p>
-            <p className="text-xs text-gray-500">Owner Portal</p>
+            <p className="font-bold text-gray-900">BMP Central</p>
+            <p className="text-xs text-gray-400">Owner Portal</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button className="w-8 h-8 rounded-xl bg-gray-50 hover:bg-gray-100 flex items-center justify-center transition-colors">
+          <button className="w-9 h-9 rounded-xl bg-gray-50 hover:bg-gray-100 flex items-center justify-center transition-colors">
             <Bell className="w-4 h-4 text-gray-500" />
           </button>
-          <div className="w-8 h-8 rounded-xl bg-purple-500 flex items-center justify-center text-white font-bold text-xs">
+          <div className="w-9 h-9 rounded-xl bg-purple-500 flex items-center justify-center text-white font-bold text-sm shadow-sm">
             JO
           </div>
         </div>
       </header>
 
       {/* Sticky stats bar */}
-      <div className="bg-white border-b border-gray-200 px-6 py-2.5 sticky top-[73px] z-20">
-        <div className="flex items-center gap-6">
+      <div className="bg-white border-b border-gray-200 px-6 py-3 sticky top-[73px] z-20">
+        <div className="flex items-center gap-8">
           {summaryStats.map((s) => (
-            <div key={s.label} className="flex items-center gap-2">
-              <span className="text-xs text-gray-500">{s.label}:</span>
-              <span className="text-sm font-bold text-gray-900">{s.value}</span>
+            <div key={s.label} className="flex flex-col">
+              <span className="text-xs font-medium text-gray-400 uppercase tracking-wider">{s.label}</span>
+              <span className={`text-base font-bold ${s.color}`}>{s.value}</span>
             </div>
           ))}
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="bg-white border-b border-gray-200 px-6 sticky top-[113px] z-10">
+      <div className="bg-white border-b border-gray-200 px-6 sticky top-[121px] z-10">
         <div className="flex gap-1">
           {tabs.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`px-4 py-3 text-sm font-semibold border-b-2 transition-colors ${
+              className={`px-5 py-3.5 text-sm font-semibold border-b-2 transition-colors ${
                 activeTab === tab.id
                   ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
+                  : 'border-transparent text-gray-500 hover:text-gray-800 hover:border-gray-300'
               }`}
             >
               {tab.label}
