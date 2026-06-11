@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Messages — BMP Central</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="css/admin.css"/>
+</head>
+<body>
+<div class="admin-layout">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main-wrap" style="overflow:hidden;">
+    <header class="topbar" id="topbar"></header>
+    <div class="msg-layout">
+
+      <!-- Thread list -->
+      <div class="msg-sidebar">
+        <div class="msg-sidebar-header">Messages</div>
+        <div class="msg-threads" id="threadList">
+          <div style="padding:32px;text-align:center;color:rgba(15,23,42,0.35);font-size:0.82rem;">Loading…</div>
+        </div>
+      </div>
+
+      <!-- Conversation -->
+      <div class="msg-main" id="msgMain">
+        <div class="msg-no-selection" id="noSelection">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity:0.3;"><path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+          <span>Select a conversation</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/config.js"></script>
+<script src="js/utils.js"></script>
+<script src="js/layout.js"></script>
+<script>
+let currentUser = null
+let threads = []
+let activeTenantId = null
+let realtimeSub = null
+
+async function init() {
+  currentUser = await requireAuth()
+  if (!currentUser) return
+  await renderLayout('messages', 'Messages')
+  await loadThreads()
+  subscribeRealtime()
+}
+
+async function loadThreads() {
+  const { data: msgs } = await db
+    .from('messages')
+    .select('tenant_id, body, created_at, read, sender, tenants(id, name)')
+    .eq('pm_id', currentUser.id)
+    .order('created_at', { ascending: false })
+
+  if (!msgs) return
+
+  const map = new Map()
+  for (const m of msgs) {
+    const tid = m.tenant_id
+    if (!map.has(tid)) {
+      map.set(tid, { tenant: m.tenants, lastMsg: m, unread: 0 })
+    }
+    if (m.sender === 'tenant' && !m.read) {
+      map.get(tid).unread++
+    }
+  }
+  threads = [...map.values()]
+
+  const list = document.getElementById('threadList')
+  if (threads.length === 0) {
+    list.innerHTML = '<div style="padding:32px;text-align:center;color:rgba(15,23,42,0.35);font-size:0.82rem;">No conversations yet</div>'
+    return
+  }
+
+  list.innerHTML = threads.map(t => `
+    <div class="msg-thread ${t.unread > 0 ? 'unread' : ''} ${t.tenant.id === activeTenantId ? 'active' : ''}"
+         onclick="openConversation('${t.tenant.id}','${t.tenant.name}')">
+      <div class="avatar" style="background:${avatarColor(t.tenant.name)}">${initials(t.tenant.name)}</div>
+      <div class="msg-thread-body">
+        <div class="msg-thread-name">
+          ${t.tenant.name}
+          <span class="msg-thread-time">${timeAgo(t.lastMsg.created_at)}</span>
+        </div>
+        <div class="msg-thread-preview">${t.lastMsg.sender === 'pm' ? 'You: ' : ''}${t.lastMsg.body}</div>
+      </div>
+      ${t.unread > 0 ? '<div class="msg-unread-dot"></div>' : ''}
+    </div>`).join('')
+}
+
+async function openConversation(tenantId, tenantName) {
+  activeTenantId = tenantId
+
+  // Mark messages as read
+  await db.from('messages')
+    .update({ read: true })
+    .eq('pm_id', currentUser.id)
+    .eq('tenant_id', tenantId)
+    .eq('sender', 'tenant')
+
+  // Re-render thread list (clear unread)
+  const thread = threads.find(t => t.tenant.id === tenantId)
+  if (thread) thread.unread = 0
+  await loadThreads()
+
+  const main = document.getElementById('msgMain')
+  main.innerHTML = `
+    <div class="msg-main-header">
+      <div class="avatar" style="background:${avatarColor(tenantName)}">${initials(tenantName)}</div>
+      <div>
+        <div class="fw-700" style="font-size:0.9rem;">${tenantName}</div>
+        <div class="text-muted text-sm">Tenant</div>
+      </div>
+    </div>
+    <div class="msg-convo" id="convo"></div>
+    <div class="msg-compose">
+      <textarea id="msgInput" placeholder="Message ${tenantName}…" rows="1" onkeydown="handleKey(event)"></textarea>
+      <button class="btn btn-primary btn-sm" onclick="sendMessage()">Send</button>
+    </div>
+  `
+
+  await loadMessages(tenantId)
+}
+
+async function loadMessages(tenantId) {
+  const { data } = await db
+    .from('messages')
+    .select('*')
+    .eq('pm_id', currentUser.id)
+    .eq('tenant_id', tenantId)
+    .order('created_at', { ascending: true })
+
+  const convo = document.getElementById('convo')
+  if (!convo) return
+
+  if (!data || data.length === 0) {
+    convo.innerHTML = '<div style="text-align:center;color:rgba(15,23,42,0.35);font-size:0.82rem;padding:24px;">No messages yet. Say hello!</div>'
+    return
+  }
+
+  convo.innerHTML = data.map(m => `
+    <div class="bubble-wrap from-${m.sender === 'pm' ? 'pm' : 'tenant'}">
+      <div class="bubble">${escapeHtml(m.body)}</div>
+      <div class="bubble-time">${timeAgo(m.created_at)}</div>
+    </div>`).join('')
+
+  convo.scrollTop = convo.scrollHeight
+}
+
+async function sendMessage() {
+  const input = document.getElementById('msgInput')
+  const body = input.value.trim()
+  if (!body || !activeTenantId) return
+
+  input.value = ''
+  input.style.height = ''
+
+  const { error } = await db.from('messages').insert({
+    pm_id: currentUser.id,
+    tenant_id: activeTenantId,
+    sender: 'pm',
+    body,
+    read: true,
+  })
+
+  if (error) { toast(error.message, 'error'); return }
+  await loadMessages(activeTenantId)
+  await loadThreads()
+}
+
+function handleKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault()
+    sendMessage()
+  }
+  // auto-resize textarea
+  const ta = e.target
+  ta.style.height = ''
+  ta.style.height = Math.min(ta.scrollHeight, 120) + 'px'
+}
+
+function subscribeRealtime() {
+  realtimeSub = db.channel('msg-changes')
+    .on('postgres_changes', {
+      event: 'INSERT',
+      schema: 'public',
+      table: 'messages',
+      filter: `pm_id=eq.${currentUser.id}`
+    }, async (payload) => {
+      await loadThreads()
+      if (payload.new.tenant_id === activeTenantId) {
+        await loadMessages(activeTenantId)
+      }
+    })
+    .subscribe()
+}
+
+function escapeHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>')
+}
+
+init()
+</script>
+</body>
+</html>

@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Request a Demo — BMP Central</title>
+    <meta name="description" content="See how BMP Central builds your custom property management portal in two weeks. Schedule a 30-minute demo." />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+    <style>
+      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+      :root {
+        --blue: #2563eb;
+        --dark: #0f172a;
+        --max: 1140px;
+      }
+
+      body {
+        font-family: 'Inter', sans-serif;
+        background: #fff;
+        color: var(--dark);
+        min-height: 100vh;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      /* ── NAV ── */
+      .nav-wrap {
+        position: sticky;
+        top: 0;
+        z-index: 100;
+        background: rgba(255,255,255,0.92);
+        backdrop-filter: blur(12px);
+        border-bottom: 1px solid rgba(0,0,0,0.07);
+      }
+      .nav-inner {
+        max-width: var(--max);
+        margin: 0 auto;
+        padding: 0 32px;
+        height: 64px;
+        display: flex;
+        align-items: center;
+        gap: 40px;
+      }
+      .logo {
+        text-decoration: none;
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        flex-shrink: 0;
+      }
+      .logo-mark {
+        background: var(--blue);
+        color: #fff;
+        font-size: 0.7rem;
+        font-weight: 900;
+        letter-spacing: 0.06em;
+        padding: 5px 8px;
+        border-radius: 7px;
+      }
+      .logo-text {
+        font-size: 0.95rem;
+        font-weight: 700;
+        color: var(--dark);
+      }
+      .nav-back {
+        margin-left: auto;
+        font-size: 0.82rem;
+        font-weight: 600;
+        color: rgba(15,23,42,0.45);
+        text-decoration: none;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        transition: color 0.15s;
+      }
+      .nav-back:hover { color: var(--dark); }
+
+      /* ── MAIN LAYOUT ── */
+      .demo-wrap {
+        max-width: var(--max);
+        margin: 0 auto;
+        padding: 72px 32px 100px;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 80px;
+        align-items: start;
+      }
+
+      /* ── LEFT: HEADING + FORM ── */
+      .demo-left {}
+
+      .demo-heading {
+        font-size: clamp(2.8rem, 5.5vw, 5.2rem);
+        font-weight: 900;
+        line-height: 1.03;
+        letter-spacing: -0.055em;
+        color: var(--dark);
+        margin-bottom: 14px;
+      }
+      .demo-heading em {
+        font-style: italic;
+        color: var(--blue);
+      }
+
+      .demo-sub {
+        font-size: 1rem;
+        color: rgba(15,23,42,0.5);
+        line-height: 1.65;
+        margin-bottom: 44px;
+        max-width: 420px;
+      }
+
+      /* Steps */
+      .demo-steps {
+        display: flex;
+        gap: 0;
+        margin-bottom: 32px;
+        border-bottom: 1px solid rgba(0,0,0,0.08);
+      }
+      .ds-tab {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 0 0 14px;
+        margin-right: 32px;
+        font-size: 0.82rem;
+        font-weight: 600;
+        color: rgba(15,23,42,0.35);
+        border-bottom: 2px solid transparent;
+        margin-bottom: -1px;
+        cursor: default;
+      }
+      .ds-tab.active {
+        color: var(--dark);
+        border-bottom-color: var(--blue);
+      }
+      .ds-dot {
+        width: 8px; height: 8px;
+        border-radius: 50%;
+        background: rgba(15,23,42,0.18);
+        flex-shrink: 0;
+      }
+      .ds-tab.active .ds-dot { background: var(--blue); }
+
+      /* Form card */
+      .demo-form-card {
+        background: #fff;
+        border: 1px solid rgba(0,0,0,0.1);
+        border-radius: 20px;
+        padding: 36px;
+        box-shadow: 0 4px 24px rgba(0,0,0,0.06);
+      }
+      .dfc-title {
+        font-size: 1.05rem;
+        font-weight: 800;
+        color: var(--dark);
+        margin-bottom: 4px;
+      }
+      .dfc-sub {
+        font-size: 0.82rem;
+        color: rgba(15,23,42,0.44);
+        margin-bottom: 28px;
+      }
+
+      .form-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+        margin-bottom: 12px;
+      }
+      .form-row.single { grid-template-columns: 1fr; }
+
+      .form-field {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .form-field label {
+        font-size: 0.72rem;
+        font-weight: 700;
+        color: rgba(15,23,42,0.5);
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+      .form-field input,
+      .form-field select {
+        height: 48px;
+        border: 1px solid rgba(0,0,0,0.12);
+        border-radius: 10px;
+        padding: 0 16px;
+        font-family: 'Inter', sans-serif;
+        font-size: 0.88rem;
+        color: var(--dark);
+        background: #fafafa;
+        outline: none;
+        transition: border-color 0.15s, box-shadow 0.15s;
+        appearance: none;
+        -webkit-appearance: none;
+      }
+      .form-field input:focus,
+      .form-field select:focus {
+        border-color: var(--blue);
+        box-shadow: 0 0 0 3px rgba(37,99,235,0.1);
+        background: #fff;
+      }
+      .form-field input::placeholder { color: rgba(15,23,42,0.28); }
+
+      .btn-demo-submit {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        width: 100%;
+        height: 52px;
+        margin-top: 20px;
+        background: var(--blue);
+        color: #fff;
+        border: none;
+        border-radius: 12px;
+        font-family: 'Inter', sans-serif;
+        font-size: 0.9rem;
+        font-weight: 700;
+        cursor: pointer;
+        transition: background 0.15s, transform 0.1s;
+      }
+      .btn-demo-submit:hover { background: #1d4ed8; }
+      .btn-demo-submit:active { transform: scale(0.98); }
+      .btn-arrow {
+        font-size: 1.1rem;
+        transition: transform 0.15s;
+      }
+      .btn-demo-submit:hover .btn-arrow { transform: translateX(3px); }
+
+      .form-legal {
+        font-size: 0.72rem;
+        color: rgba(15,23,42,0.32);
+        line-height: 1.6;
+        margin-top: 16px;
+        text-align: center;
+      }
+
+      /* ── RIGHT: MOCKUP ── */
+      .demo-right {
+        position: sticky;
+        top: 96px;
+      }
+
+      .mockup-wrap {
+        position: relative;
+      }
+
+      /* Subtle background blob */
+      .mockup-blob {
+        position: absolute;
+        inset: -60px -40px -60px -40px;
+        background: radial-gradient(ellipse at 60% 40%, rgba(37,99,235,0.07) 0%, transparent 70%);
+        pointer-events: none;
+        z-index: 0;
+      }
+
+      /* Phone shell */
+      .phone-shell {
+        position: relative;
+        z-index: 1;
+        width: 280px;
+        margin: 0 auto 32px;
+        background: #f1f5f9;
+        border-radius: 36px;
+        padding: 14px;
+        box-shadow:
+          0 0 0 1px rgba(0,0,0,0.06),
+          0 32px 80px rgba(0,0,0,0.18),
+          0 8px 24px rgba(0,0,0,0.08);
+      }
+      .phone-screen {
+        background: #fff;
+        border-radius: 26px;
+        overflow: hidden;
+      }
+      .phone-bar {
+        background: #fff;
+        padding: 16px 18px 10px;
+        border-bottom: 1px solid #f1f5f9;
+      }
+      .phone-bar-title {
+        font-size: 1rem;
+        font-weight: 800;
+        color: var(--dark);
+        margin-bottom: 10px;
+      }
+      .phone-search {
+        background: #f1f5f9;
+        border-radius: 10px;
+        padding: 7px 12px;
+        font-size: 0.75rem;
+        color: rgba(15,23,42,0.35);
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .phone-threads {
+        padding: 0;
+      }
+      .thread {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 12px 18px;
+        border-bottom: 1px solid #f8fafc;
+        cursor: default;
+        transition: background 0.1s;
+      }
+      .thread:hover { background: #f8fafc; }
+      .thread:last-child { border-bottom: none; }
+
+      .thread-avatar {
+        width: 40px; height: 40px;
+        border-radius: 50%;
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.7rem;
+        font-weight: 800;
+        color: #fff;
+      }
+      .ta-blue   { background: var(--blue); }
+      .ta-green  { background: #10b981; }
+      .ta-orange { background: #f59e0b; }
+      .ta-purple { background: #7c3aed; }
+      .ta-red    { background: #ef4444; }
+
+      .thread-body { flex: 1; min-width: 0; }
+      .thread-name {
+        font-size: 0.78rem;
+        font-weight: 700;
+        color: var(--dark);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 2px;
+      }
+      .thread-time {
+        font-size: 0.65rem;
+        font-weight: 500;
+        color: rgba(15,23,42,0.35);
+      }
+      .thread-preview {
+        font-size: 0.72rem;
+        color: rgba(15,23,42,0.45);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .thread-unread .thread-name { font-weight: 800; }
+      .thread-unread .thread-preview { color: var(--dark); font-weight: 500; }
+      .thread-badge {
+        width: 18px; height: 18px;
+        border-radius: 50%;
+        background: var(--blue);
+        color: #fff;
+        font-size: 0.6rem;
+        font-weight: 800;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+      }
+
+      /* Stats row */
+      .mockup-stats {
+        position: relative;
+        z-index: 1;
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1px;
+        background: rgba(0,0,0,0.07);
+        border: 1px solid rgba(0,0,0,0.07);
+        border-radius: 18px;
+        overflow: hidden;
+      }
+      .ms-item {
+        background: #fff;
+        padding: 22px 16px;
+        text-align: center;
+      }
+      .ms-n {
+        font-size: clamp(1.6rem, 2.5vw, 2rem);
+        font-weight: 900;
+        color: var(--dark);
+        letter-spacing: -0.04em;
+        line-height: 1;
+        margin-bottom: 4px;
+      }
+      .ms-n span { color: var(--blue); }
+      .ms-l {
+        font-size: 0.67rem;
+        font-weight: 600;
+        color: rgba(15,23,42,0.4);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+
+      /* Testimonial card floating */
+      .mockup-quote {
+        position: relative;
+        z-index: 1;
+        margin-top: 20px;
+        background: var(--dark);
+        border-radius: 16px;
+        padding: 20px 22px;
+        display: flex;
+        gap: 14px;
+        align-items: flex-start;
+      }
+      .mq-avatar {
+        width: 36px; height: 36px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #60a5fa, var(--blue));
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.7rem;
+        font-weight: 800;
+        color: #fff;
+      }
+      .mq-body {}
+      .mq-text {
+        font-size: 0.8rem;
+        color: rgba(255,255,255,0.8);
+        line-height: 1.55;
+        margin-bottom: 8px;
+      }
+      .mq-name {
+        font-size: 0.7rem;
+        font-weight: 700;
+        color: rgba(255,255,255,0.4);
+      }
+      .mq-stars {
+        color: #fbbf24;
+        font-size: 0.75rem;
+        letter-spacing: 0.05em;
+        margin-bottom: 4px;
+      }
+
+      /* ── RESPONSIVE ── */
+      @media (max-width: 900px) {
+        .demo-wrap {
+          grid-template-columns: 1fr;
+          gap: 56px;
+          padding: 48px 24px 80px;
+        }
+        .demo-right { position: static; }
+        .phone-shell { width: 260px; }
+        .demo-heading { font-size: clamp(2.4rem, 7vw, 3.6rem); }
+      }
+      @media (max-width: 540px) {
+        .form-row { grid-template-columns: 1fr; }
+        .demo-form-card { padding: 24px 20px; }
+        .mockup-stats { grid-template-columns: repeat(3, 1fr); }
+      }
+    </style>
+  </head>
+  <body>
+
+    <header class="nav-wrap">
+      <div class="nav-inner">
+        <a href="/" class="logo">
+          <span class="logo-mark">BMP</span>
+          <span class="logo-text">BMP Central</span>
+        </a>
+        <a href="/" class="nav-back">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+          Back to home
+        </a>
+      </div>
+    </header>
+
+    <main>
+      <div class="demo-wrap">
+
+        <!-- LEFT -->
+        <div class="demo-left">
+          <h1 class="demo-heading"><em>Request</em> a demo.</h1>
+          <p class="demo-sub">See how BMP Central builds your tenant portal, owner dashboard, and PM admin — live in two weeks. We'll text you a walkthrough.</p>
+
+          <div class="demo-steps">
+            <div class="ds-tab active">
+              <div class="ds-dot"></div>
+              Fill out the form
+            </div>
+            <div class="ds-tab">
+              <div class="ds-dot"></div>
+              Book your call
+            </div>
+          </div>
+
+          <div class="demo-form-card">
+            <div class="dfc-title">BMP Central Demo</div>
+            <div class="dfc-sub">We'll reach out within one business day to schedule your 30-minute walkthrough.</div>
+
+            <form id="demoForm" onsubmit="handleSubmit(event)">
+              <div class="form-row">
+                <div class="form-field">
+                  <label>First name *</label>
+                  <input type="text" name="first" placeholder="Sarah" required />
+                </div>
+                <div class="form-field">
+                  <label>Last name *</label>
+                  <input type="text" name="last" placeholder="Johnson" required />
+                </div>
+              </div>
+
+              <div class="form-row single">
+                <div class="form-field">
+                  <label>Email *</label>
+                  <input type="email" name="email" placeholder="sarah@skyviewpm.com" required />
+                </div>
+              </div>
+
+              <div class="form-row single">
+                <div class="form-field">
+                  <label>Phone number</label>
+                  <input type="tel" name="phone" placeholder="+1 (555) 000-0000" />
+                </div>
+              </div>
+
+              <div class="form-row single">
+                <div class="form-field">
+                  <label>Units managed *</label>
+                  <select name="units" required>
+                    <option value="" disabled selected>Select range</option>
+                    <option value="1-10">1 – 10 units</option>
+                    <option value="11-25">11 – 25 units</option>
+                    <option value="26-50">26 – 50 units</option>
+                    <option value="51-100">51 – 100 units</option>
+                    <option value="100+">100+ units</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="form-row single">
+                <div class="form-field">
+                  <label>Current tools (optional)</label>
+                  <input type="text" name="tools" placeholder="AppFolio, Gmail, Spreadsheets…" />
+                </div>
+              </div>
+
+              <button type="submit" class="btn-demo-submit">
+                Continue <span class="btn-arrow">→</span>
+              </button>
+            </form>
+
+            <p class="form-legal">By submitting, you agree to be contacted by BMP Central about your demo request. No spam — ever.</p>
+          </div>
+        </div>
+
+        <!-- RIGHT -->
+        <div class="demo-right">
+          <div class="mockup-wrap">
+            <div class="mockup-blob"></div>
+
+            <!-- Phone mockup -->
+            <div class="phone-shell">
+              <div class="phone-screen">
+                <div class="phone-bar">
+                  <div class="phone-bar-title">Tenant Messages</div>
+                  <div class="phone-search">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    Search conversations
+                  </div>
+                </div>
+                <div class="phone-threads">
+                  <div class="thread thread-unread">
+                    <div class="thread-avatar ta-blue">JR</div>
+                    <div class="thread-body">
+                      <div class="thread-name">James Rivera <span class="thread-time">9:41 AM</span></div>
+                      <div class="thread-preview">Hey, the AC in 4B is still not working</div>
+                    </div>
+                    <div class="thread-badge">2</div>
+                  </div>
+                  <div class="thread thread-unread">
+                    <div class="thread-avatar ta-green">MP</div>
+                    <div class="thread-body">
+                      <div class="thread-name">Maya Patel <span class="thread-time">9:38 AM</span></div>
+                      <div class="thread-preview">Rent receipt for October — got it, thanks!</div>
+                    </div>
+                    <div class="thread-badge">1</div>
+                  </div>
+                  <div class="thread">
+                    <div class="thread-avatar ta-orange">DL</div>
+                    <div class="thread-body">
+                      <div class="thread-name">David Lee <span class="thread-time">9:15 AM</span></div>
+                      <div class="thread-preview">Lease renewal form submitted ✓</div>
+                    </div>
+                  </div>
+                  <div class="thread">
+                    <div class="thread-avatar ta-purple">AK</div>
+                    <div class="thread-body">
+                      <div class="thread-name">Aisha Khan <span class="thread-time">Yesterday</span></div>
+                      <div class="thread-preview">Thanks for the quick response on the water issue</div>
+                    </div>
+                  </div>
+                  <div class="thread">
+                    <div class="thread-avatar ta-red">TW</div>
+                    <div class="thread-body">
+                      <div class="thread-name">Tom Walsh <span class="thread-time">Yesterday</span></div>
+                      <div class="thread-preview">Move-in date confirmed for Nov 1st</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Stats -->
+            <div class="mockup-stats">
+              <div class="ms-item">
+                <div class="ms-n">2<span>wk</span></div>
+                <div class="ms-l">Setup time</div>
+              </div>
+              <div class="ms-item">
+                <div class="ms-n">3<span>hrs</span></div>
+                <div class="ms-l">Saved per day</div>
+              </div>
+              <div class="ms-item">
+                <div class="ms-n">4.9<span>★</span></div>
+                <div class="ms-l">Avg rating</div>
+              </div>
+            </div>
+
+            <!-- Testimonial -->
+            <div class="mockup-quote">
+              <div class="mq-avatar">SJ</div>
+              <div class="mq-body">
+                <div class="mq-stars">★★★★★</div>
+                <div class="mq-text">"I went from managing everything across six apps to one clean portal. My tenants actually love it."</div>
+                <div class="mq-name">Sarah J. — 28-unit portfolio, Phoenix AZ</div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+    </main>
+
+    <script>
+      function handleSubmit(e) {
+        e.preventDefault();
+        const btn = e.target.querySelector('.btn-demo-submit');
+        btn.textContent = 'Submitted! We\'ll be in touch soon.';
+        btn.style.background = '#10b981';
+        btn.disabled = true;
+      }
+    </script>
+
+  </body>
+</html>

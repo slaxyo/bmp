@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BMP Central — Custom Property Management Portals</title>
+    <meta name="description" content="BMP Central builds custom management portals for independent property managers. Tenant portal, owner dashboard, PM admin — delivered in two weeks." />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+
+    <!-- ============================== ANNOUNCEMENT BAR ============================== -->
+    <div class="announce-bar">
+      <span class="ab-msg">Build your custom property portal &mdash; launch in 2 weeks</span>
+      <div class="ab-mid">
+        <div class="ab-check">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+          No technical setup required
+        </div>
+        <a href="#contact" class="ab-pill">Get Started &rarr;</a>
+      </div>
+      <a href="#contact" class="ab-login">Log in</a>
+    </div>
+
+    <!-- ============================== NAV ============================== -->
+    <header class="nav-wrap" id="nav">
+      <div class="nav-inner">
+        <a href="/" class="logo">
+          <span class="logo-mark">BMP</span>
+          <span class="logo-text">BMP Central</span>
+        </a>
+        <nav class="nav-links">
+          <a href="#why">Why BMP</a>
+          <a href="#product">Product</a>
+          <a href="#pricing">Pricing</a>
+          <a href="#faq">FAQ</a>
+        </nav>
+        <div class="nav-actions">
+          <a class="btn-nav-solid" href="demo.html">Request a Demo</a>
+        </div>
+      </div>
+    </header>
+
+    <main>
+
+      <!-- ============================== HERO ============================== -->
+      <section class="s-hero">
+
+        <!-- Centered headline + copy -->
+        <div class="hero-center">
+
+          <h1>
+            Your properties deserve<br>
+            <span class="hero-rotate-wrap">
+              <span class="hero-rotate" id="heroRotate"><span id="heroTyped"></span><span class="hero-cursor"></span></span>
+            </span>
+          </h1>
+
+          <p class="hero-sub">
+            We build custom management portals for independent property managers —
+            replacing the email chains, spreadsheets, and missed calls slowing your business down.
+          </p>
+
+          <a class="btn-hero-main" href="demo.html">Request a Demo</a>
+
+          <!-- Social proof -->
+          <div class="trust-proof">
+            <div class="tp-stars">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="#f59e0b" stroke="none"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="#f59e0b" stroke="none"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="#f59e0b" stroke="none"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="#f59e0b" stroke="none"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="#f59e0b" stroke="none"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+            </div>
+            <span class="tp-rating">5.0 rating</span>
+            <span class="tp-div">|</span>
+            <div class="tp-avatars">
+              <div class="tp-av" style="background:#2563eb;">J</div>
+              <div class="tp-av" style="background:#7c3aed;">M</div>
+              <div class="tp-av" style="background:#059669;">S</div>
+            </div>
+            <span class="tp-text">Delivered in under 2 weeks &nbsp;&middot;&nbsp; Fixed price &nbsp;&middot;&nbsp; No technical setup</span>
+          </div>
+
+        </div>
+
+        <!-- Dashboard snapshot below headline -->
+        <div class="hero-snapshot">
+          <div class="browser">
+            <div class="win-bar">
+              <div class="win-dots">
+                <span class="wd wd-r"></span>
+                <span class="wd wd-y"></span>
+                <span class="wd wd-g"></span>
+              </div>
+              <div class="win-url">bmpcentral.com/admin</div>
+              <div class="win-actions">
+                <div class="win-btn-stub"></div>
+                <div class="win-btn-stub"></div>
+              </div>
+            </div>
+            <div class="win-body">
+              <aside class="app-sidebar">
+                <div class="app-logo">BC</div>
+                <nav class="app-nav">
+                  <div class="ani ani-active" title="Dashboard">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+                  </div>
+                  <div class="ani" title="Properties">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                  </div>
+                  <div class="ani" title="Tenants">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+                  </div>
+                  <div class="ani" title="Maintenance">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>
+                  </div>
+                  <div class="ani" title="Messages">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+                  </div>
+                </nav>
+              </aside>
+              <div class="app-main">
+                <div class="app-top">
+                  <div>
+                    <div class="at-title">PM Dashboard</div>
+                    <div class="at-sub">Welcome back, Admin</div>
+                  </div>
+                  <div class="at-av">A</div>
+                </div>
+                <div class="app-kpis">
+                  <div class="ak">
+                    <span class="ak-v">3</span>
+                    <span class="ak-l">Properties</span>
+                  </div>
+                  <div class="ak">
+                    <span class="ak-v">11<small>/12</small></span>
+                    <span class="ak-l">Occupied</span>
+                  </div>
+                  <div class="ak ak--blue">
+                    <span class="ak-v">$14,400</span>
+                    <span class="ak-l">Monthly revenue</span>
+                  </div>
+                  <div class="ak ak--amber">
+                    <span class="ak-v">2</span>
+                    <span class="ak-l">Open tickets</span>
+                  </div>
+                </div>
+                <div class="app-lbl">Recent activity</div>
+                <div class="app-feed">
+                  <div class="af-row">
+                    <span class="af-dot d-amber"></span>
+                    <div class="af-body">
+                      <span class="af-t">Unit 4B &mdash; Maintenance request</span>
+                      <span class="af-s">Plumbing &middot; 2 hours ago</span>
+                    </div>
+                    <span class="af-badge b-open">Open</span>
+                  </div>
+                  <div class="af-row">
+                    <span class="af-dot d-blue"></span>
+                    <div class="af-body">
+                      <span class="af-t">Sarah Mitchell &mdash; Rent paid</span>
+                      <span class="af-s">$1,450 &middot; June 1</span>
+                    </div>
+                    <span class="af-badge b-paid">Paid</span>
+                  </div>
+                  <div class="af-row">
+                    <span class="af-dot d-green"></span>
+                    <div class="af-body">
+                      <span class="af-t">Unit 7A &mdash; Lease renewed</span>
+                      <span class="af-s">12-month term &middot; May 30</span>
+                    </div>
+                    <span class="af-badge b-done">Done</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="float-pill fp-tl">
+            <span class="fp-dot"></span>
+            Maintenance request submitted
+          </div>
+          <div class="float-pill fp-br">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+            $14,400 rent collected
+          </div>
+        </div>
+
+        <!-- KPI strip -->
+        <div class="kpi-strip">
+          <div class="ks-item">
+            <span class="ks-v">2 weeks</span>
+            <span class="ks-l">Portal delivery</span>
+          </div>
+          <span class="ks-div"></span>
+          <div class="ks-item">
+            <span class="ks-v">$4,500</span>
+            <span class="ks-l">One-time build fee</span>
+          </div>
+          <span class="ks-div"></span>
+          <div class="ks-item">
+            <span class="ks-v">3 logins</span>
+            <span class="ks-l">Tenant &middot; Owner &middot; PM</span>
+          </div>
+          <span class="ks-div"></span>
+          <div class="ks-item">
+            <span class="ks-v">$200/mo</span>
+            <span class="ks-l">Hosting &amp; support</span>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- LOGO STRIP -->
+      <section class="s-logos">
+        <p class="logos-eyebrow">Trusted by independent property managers</p>
+        <div class="logos-row">
+          <span class="logo-item">SkyView Properties</span>
+          <span class="logos-sep">&middot;</span>
+          <span class="logo-item">Harbor PM</span>
+          <span class="logos-sep">&middot;</span>
+          <span class="logo-item">Atlas Management</span>
+          <span class="logos-sep">&middot;</span>
+          <span class="logo-item">Westfield Realty</span>
+          <span class="logos-sep">&middot;</span>
+          <span class="logo-item">CoreProperty</span>
+          <span class="logos-sep">&middot;</span>
+          <span class="logo-item">Summit PM</span>
+          <span class="logos-sep">&middot;</span>
+          <span class="logo-item">Elm Street Realty</span>
+        </div>
+      </section>
+
+      <!-- ============================== CHAOS ============================== -->
+      <section class="s-chaos" id="why">
+
+        <div class="chaos-head">
+          <div class="chaos-eyebrow"><span class="chaos-live"></span> The problem</div>
+          <h2 class="chaos-h2">Six apps.<br>Still dropping the ball.</h2>
+        </div>
+
+        <div class="kn-grid">
+
+          <div class="kn-card">
+            <div class="kn-app">
+              <div class="kn-icon ki-gmail">
+                <svg width="24" height="24" viewBox="0 0 20 20" fill="white"><path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z"/><path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z"/></svg>
+              </div>
+              <span>Gmail</span>
+            </div>
+            <div class="kn-num">47<span class="kn-dot"></span></div>
+            <div class="kn-unit">unread emails</div>
+          </div>
+
+          <div class="kn-card">
+            <div class="kn-app">
+              <div class="kn-icon ki-sheets">
+                <svg width="24" height="24" viewBox="0 0 20 20" fill="white"><path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clip-rule="evenodd"/></svg>
+              </div>
+              <span>Google Sheets</span>
+            </div>
+            <div class="kn-num">3<span class="kn-dot"></span></div>
+            <div class="kn-unit">weeks out of date</div>
+          </div>
+
+          <div class="kn-card">
+            <div class="kn-app">
+              <div class="kn-icon ki-sms">
+                <svg width="24" height="24" viewBox="0 0 20 20" fill="white"><path fill-rule="evenodd" d="M18 5v8a2 2 0 01-2 2h-5l-5 4v-4H4a2 2 0 01-2-2V5a2 2 0 012-2h12a2 2 0 012 2zM7 8H5v2h2V8zm2 0h2v2H9V8zm6 0h-2v2h2V8z" clip-rule="evenodd"/></svg>
+              </div>
+              <span>Text Messages</span>
+            </div>
+            <div class="kn-num">11<span class="kn-dot"></span></div>
+            <div class="kn-unit">tenant texts today</div>
+          </div>
+
+          <div class="kn-card">
+            <div class="kn-app">
+              <div class="kn-icon ki-phone">
+                <svg width="24" height="24" viewBox="0 0 20 20" fill="white"><path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z"/></svg>
+              </div>
+              <span>Phone Calls</span>
+            </div>
+            <div class="kn-num">5<span class="kn-dot"></span></div>
+            <div class="kn-unit">missed calls</div>
+          </div>
+
+          <div class="kn-card">
+            <div class="kn-app">
+              <div class="kn-icon ki-appfolio">
+                <svg width="24" height="24" viewBox="0 0 20 20" fill="white"><path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"/></svg>
+              </div>
+              <span>PM Software</span>
+            </div>
+            <div class="kn-num">$350<span class="kn-dot"></span></div>
+            <div class="kn-unit">per month</div>
+          </div>
+
+          <div class="kn-card">
+            <div class="kn-app">
+              <div class="kn-icon ki-wa">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>
+              </div>
+              <span>WhatsApp</span>
+            </div>
+            <div class="kn-num">3<span class="kn-dot"></span></div>
+            <div class="kn-unit">separate group chats</div>
+          </div>
+
+        </div>
+
+      </section>
+
+      <!-- ============================== PRODUCT ============================== -->
+      <section class="section s-features" id="product">
+        <h2 class="feat-h2">Tired of managing your portfolio<br><em>across six different tools?</em></h2>
+
+        <div class="bento">
+
+          <!-- Large card: Tenant portal -->
+          <div class="bc bc-large">
+            <div class="bc-text">
+              <h3>Tenant portal</h3>
+              <p>Tenants log in to submit maintenance requests, check rent status, view lease documents, and message the PM — without ever texting you directly.</p>
+              <ul class="bc-list">
+                <li>Rent status and payment confirmation</li>
+                <li>One-click maintenance request form</li>
+                <li>Lease document viewer and download</li>
+                <li>Direct messaging with the PM</li>
+              </ul>
+            </div>
+            <div class="bc-chat-wrap">
+              <div class="bc-chat">
+                <div class="bcc-row">
+                  <div class="bcc-av bcc-av-t">T</div>
+                  <div class="bcc-bubble bcc-bubble-in">The heater in unit 3B stopped working &#x1F976;</div>
+                </div>
+                <div class="bcc-row bcc-out">
+                  <div class="bcc-av bcc-av-pm">PM</div>
+                  <div class="bcc-bubble bcc-bubble-out">On it! Ticket #234 created. Contractor visits tomorrow 10am&ndash;2pm.</div>
+                </div>
+                <div class="bcc-row">
+                  <div class="bcc-av bcc-av-t">T</div>
+                  <div class="bcc-bubble bcc-bubble-in">Amazing, thank you! &#x1F64F;</div>
+                </div>
+                <div class="bcc-tag">Ticket #234 &nbsp;&middot;&nbsp; Auto-created &nbsp;&middot;&nbsp; Open</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Medium card: Owner dashboard -->
+          <div class="bc bc-medium">
+            <h3>Owner dashboard</h3>
+            <p>Owners get real-time visibility into their portfolio — occupancy, revenue, and maintenance spend. No more update calls.</p>
+            <div class="bc-metrics">
+              <div class="bc-metric">
+                <span class="bcm-n">$14,400</span>
+                <span class="bcm-l">Monthly revenue</span>
+              </div>
+              <div class="bc-metric">
+                <span class="bcm-n">11/12</span>
+                <span class="bcm-l">Units occupied</span>
+              </div>
+              <div class="bc-metric bc-metric--full">
+                <div class="bcm-bar-wrap"><div class="bcm-bar" style="width:91.6%"></div></div>
+                <span class="bcm-l">Occupancy rate &mdash; 91.6%</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Small card: Maintenance tracker -->
+          <div class="bc bc-small">
+            <div class="bc-icon-wrap bc-icon-amber">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>
+            </div>
+            <h3>Maintenance tracker</h3>
+            <p>Every ticket logged, assigned, and resolved — with full history and contractor notes in one place.</p>
+          </div>
+
+          <!-- Small card: Document hub -->
+          <div class="bc bc-small">
+            <div class="bc-icon-wrap bc-icon-blue">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+            </div>
+            <h3>Document hub</h3>
+            <p>Leases, inspection reports, and notices stored securely — accessible to the right people, any time.</p>
+          </div>
+
+          <!-- Small card: PM command center -->
+          <div class="bc bc-small">
+            <div class="bc-icon-wrap bc-icon-green">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+            </div>
+            <h3>PM command center</h3>
+            <p>All tenants, leases, rent status, and messages in one admin view — no more switching between six tools.</p>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- ============================== HOW IT WORKS ============================== -->
+      <div class="section-band">
+        <section class="section s-hiw">
+          <h2 class="hiw-h2">Live in <em>two weeks.</em></h2>
+          <p class="hiw-sub">No technical setup. No homework. We handle everything.</p>
+
+          <div class="hiw-timeline">
+            <div class="hiw-step">
+              <div class="hiw-dot">1</div>
+              <div class="hiw-day">Day 1</div>
+              <div class="hiw-title">Discovery call</div>
+              <div class="hiw-note">30 min &mdash; you walk us through your workflow</div>
+            </div>
+            <div class="hiw-step">
+              <div class="hiw-dot">2</div>
+              <div class="hiw-day">Days 2&ndash;13</div>
+              <div class="hiw-title">We build</div>
+              <div class="hiw-note">Custom portal, branded to your business, tested and ready</div>
+            </div>
+            <div class="hiw-step hiw-step--live">
+              <div class="hiw-dot hiw-dot--live">3</div>
+              <div class="hiw-day">Day 14</div>
+              <div class="hiw-title">You go live</div>
+              <div class="hiw-note">Tenants onboarded, full launch support included</div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <!-- ============================== PRICING ============================== -->
+      <section class="section" id="pricing">
+        <div class="s-eyebrow">Pricing</div>
+        <h2 class="s-h2">Simple, transparent pricing.<br>No surprises.</h2>
+        <p class="s-p">No per-seat fees. No hidden costs. A fixed build fee and a flat monthly rate — that&rsquo;s it.</p>
+
+        <div class="pricing-row">
+          <div class="price-card">
+            <div class="pc-type">Build fee</div>
+            <div class="pc-price">$4,500</div>
+            <div class="pc-cadence">one-time</div>
+            <p class="pc-desc">Custom portal built and delivered in under two weeks. Your brand, your workflow, yours to keep.</p>
+            <div class="pc-divider"></div>
+            <ul class="pc-list">
+              <li>Tenant portal</li>
+              <li>Owner dashboard</li>
+              <li>PM admin center</li>
+              <li>Custom domain setup</li>
+              <li>Full onboarding support</li>
+            </ul>
+          </div>
+
+          <div class="price-card">
+            <div class="pc-type">Monthly</div>
+            <div class="pc-price">$200</div>
+            <div class="pc-cadence">per month</div>
+            <p class="pc-desc">Hosting, backups, support, and quarterly feature updates included every single month.</p>
+            <div class="pc-divider"></div>
+            <ul class="pc-list">
+              <li>Secure cloud hosting</li>
+              <li>Automated backups</li>
+              <li>Priority support</li>
+              <li>Quarterly updates</li>
+              <li>99.9% uptime SLA</li>
+            </ul>
+          </div>
+
+          <div class="price-card price-card--offer">
+            <div class="pc-type">Introductory build fee</div>
+            <div class="pc-price">$2,700</div>
+            <div class="pc-cadence">one-time &middot; 40% off</div>
+            <p class="pc-desc">Same portal, same support, same results — at 40% off in exchange for a testimonial after 30 days.</p>
+            <a class="btn-offer" href="#contact">Claim this offer &rarr;</a>
+          </div>
+        </div>
+
+        <p class="pricing-fine">No hidden costs. No per-seat pricing. Fixed monthly fee for ongoing hosting and support.</p>
+      </section>
+
+      <!-- ============================== FAQ ============================== -->
+      <div class="section-band" id="faq">
+        <section class="section">
+          <h2 class="faq-h2">FAQ</h2>
+
+          <div class="faq-grid">
+
+            <div class="faq-item" data-faq>
+              <button class="faq-q" aria-expanded="false">
+                <span>How long does it take to build the portal?</span>
+                <span class="faq-icon">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                </span>
+              </button>
+              <div class="faq-a">
+                <p>Most portals are delivered in under two weeks from the discovery call. We handle all the building, configuration, and testing — you just review and approve before we go live.</p>
+              </div>
+            </div>
+
+            <div class="faq-item" data-faq>
+              <button class="faq-q" aria-expanded="false">
+                <span>Do I need any technical experience?</span>
+                <span class="faq-icon">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                </span>
+              </button>
+              <div class="faq-a">
+                <p>None at all. We handle all the technical setup — hosting, domain, onboarding your tenants and owners. You just use the portal. If anything breaks, you call us.</p>
+              </div>
+            </div>
+
+            <div class="faq-item" data-faq>
+              <button class="faq-q" aria-expanded="false">
+                <span>Can I use my own domain and branding?</span>
+                <span class="faq-icon">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                </span>
+              </button>
+              <div class="faq-a">
+                <p>Yes — custom domain setup is included in the build fee. The portal is branded to your business (your logo, colors, company name) so tenants and owners see your brand, not ours.</p>
+              </div>
+            </div>
+
+            <div class="faq-item" data-faq>
+              <button class="faq-q" aria-expanded="false">
+                <span>What happens if I need changes after launch?</span>
+                <span class="faq-icon">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                </span>
+              </button>
+              <div class="faq-a">
+                <p>Quarterly feature updates are included in your $200/month plan. For immediate changes or larger additions, we handle those on a scoped basis — you tell us what you need and we quote it.</p>
+              </div>
+            </div>
+
+            <div class="faq-item" data-faq>
+              <button class="faq-q" aria-expanded="false">
+                <span>Is my tenants&rsquo; data secure?</span>
+                <span class="faq-icon">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                </span>
+              </button>
+              <div class="faq-a">
+                <p>Yes. All portals are hosted on secure cloud infrastructure with automated daily backups, HTTPS encryption, and access controls. Tenants and owners can only see their own data.</p>
+              </div>
+            </div>
+
+            <div class="faq-item" data-faq>
+              <button class="faq-q" aria-expanded="false">
+                <span>Can I cancel the monthly plan?</span>
+                <span class="faq-icon">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                </span>
+              </button>
+              <div class="faq-a">
+                <p>Yes — no lock-in contracts. Cancel with 30 days&rsquo; notice. You own the portal; if you ever want to self-host it, we&rsquo;ll hand it over with a full data export.</p>
+              </div>
+            </div>
+
+          </div>
+        </section>
+      </div>
+
+    </main>
+
+    <!-- FOOTER (Sendblue rounded card style) -->
+    <div class="footer-wrap">
+      <footer class="footer-card" id="contact">
+        <div class="fc-top">
+          <div class="fc-hero">
+            <div class="fc-get">Get started</div>
+            <div class="fc-today">today.<div class="fc-avs"><div class="fc-av" style="background:#2563eb;">J</div><div class="fc-av" style="background:#7c3aed;">M</div><div class="fc-av" style="background:#059669;">S</div></div></div>
+          </div>
+          <div class="fc-cta-block">
+            <p class="fc-cta-p">Custom property portals — tenant portal, owner dashboard, and PM admin center. Delivered in 2 weeks, fixed price.</p>
+            <a href="https://calendly.com/bmp-central/demo" class="btn-fc">Request a demo</a>
+          </div>
+        </div>
+        <div class="fc-nav">
+          <div class="fc-col"><div class="fc-col-h">Product</div><a href="#product">Tenant portal</a><a href="#product">Owner dashboard</a><a href="#product">PM admin center</a><a href="demo.html">Live demo</a></div>
+          <div class="fc-col"><div class="fc-col-h">Company</div><a href="#why">Why BMP</a><a href="#pricing">Pricing</a><a href="#faq">FAQ</a><a href="mailto:hello@bmpcentral.com">Contact</a></div>
+        </div>
+        <div class="fc-wordmark">BMP Central</div>
+        <div class="fc-bottom"><span>&copy; 2025 BMP Central &nbsp;&middot;&nbsp; hello@bmpcentral.com</span><a href="#" class="fc-top-link">Back to the top &uarr;</a></div>
+      </footer>
+    </div>
+
+    <script src="script.js"></script>
+  </body>
+</html>

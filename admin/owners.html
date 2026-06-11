@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Owners — BMP Central</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="css/admin.css"/>
+</head>
+<body>
+<div class="admin-layout">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main-wrap">
+    <header class="topbar" id="topbar"></header>
+    <main class="main-content">
+
+      <div class="page-header">
+        <div>
+          <h2>Owners</h2>
+          <div class="page-sub" id="ownerCount">Loading…</div>
+        </div>
+        <button class="btn btn-primary" onclick="openModal('addModal')">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Add Owner
+        </button>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Owner</th><th>Email</th><th>Phone</th><th>Properties</th><th>Notes</th><th></th></tr>
+          </thead>
+          <tbody id="ownerTable">
+            <tr class="loading-row"><td colspan="6">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Properties section -->
+      <div style="margin-top:28px;">
+        <div class="flex-between" style="margin-bottom:16px;">
+          <h3 style="font-size:1rem;font-weight:700;color:#0f172a;">Properties</h3>
+          <button class="btn btn-ghost btn-sm" onclick="openModal('addPropModal')">+ Add Property</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Property</th><th>Owner</th><th>Address</th><th>Units</th><th></th></tr>
+            </thead>
+            <tbody id="propTable">
+              <tr class="loading-row"><td colspan="5">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </main>
+  </div>
+</div>
+
+<!-- Add Owner Modal -->
+<div class="modal-backdrop" id="addModal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">Add Owner</span>
+      <button class="modal-close" onclick="closeModal('addModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Full Name *</label><input class="form-input" id="a-name" placeholder="John Mitchell"/></div>
+        <div class="form-group"><label class="form-label">Phone</label><input class="form-input" id="a-phone" placeholder="(602) 555-0000"/></div>
+      </div>
+      <div class="form-group"><label class="form-label">Email</label><input class="form-input" type="email" id="a-email" placeholder="owner@email.com"/></div>
+      <div class="form-group"><label class="form-label">Notes</label><textarea class="form-textarea" id="a-notes" placeholder="Any notes about this owner…"></textarea></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('addModal')">Cancel</button>
+      <button class="btn btn-primary" id="addOwnerBtn" onclick="addOwner()">Add Owner</button>
+    </div>
+  </div>
+</div>
+
+<!-- View/Edit Owner Modal -->
+<div class="modal-backdrop" id="viewModal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title" id="viewTitle">Owner Details</span>
+      <button class="modal-close" onclick="closeModal('viewModal')">✕</button>
+    </div>
+    <div class="modal-body" id="viewBody"></div>
+    <div class="modal-footer">
+      <button class="btn btn-danger btn-sm" onclick="deleteOwner()">Delete</button>
+      <div style="flex:1"></div>
+      <button class="btn btn-ghost" onclick="closeModal('viewModal')">Close</button>
+      <button class="btn btn-primary" id="saveOwnerBtn" onclick="saveOwner()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add Property Modal -->
+<div class="modal-backdrop" id="addPropModal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">Add Property</span>
+      <button class="modal-close" onclick="closeModal('addPropModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Property Name *</label><input class="form-input" id="p-name" placeholder="Skyline Apartments"/></div>
+        <div class="form-group">
+          <label class="form-label">Owner</label>
+          <select class="form-select" id="p-owner"><option value="">No owner</option></select>
+        </div>
+      </div>
+      <div class="form-group"><label class="form-label">Address</label><input class="form-input" id="p-addr" placeholder="123 Main St"/></div>
+      <div class="form-row-3">
+        <div class="form-group"><label class="form-label">City</label><input class="form-input" id="p-city" placeholder="Phoenix"/></div>
+        <div class="form-group"><label class="form-label">State</label><input class="form-input" id="p-state" placeholder="AZ" maxlength="2"/></div>
+        <div class="form-group"><label class="form-label">ZIP</label><input class="form-input" id="p-zip" placeholder="85004"/></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('addPropModal')">Cancel</button>
+      <button class="btn btn-primary" id="addPropBtn" onclick="addProperty()">Add Property</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/config.js"></script>
+<script src="js/utils.js"></script>
+<script src="js/layout.js"></script>
+<script>
+let currentUser = null
+let owners = []
+let properties = []
+let editingOwnerId = null
+
+async function init() {
+  currentUser = await requireAuth()
+  if (!currentUser) return
+  await renderLayout('owners', 'Owners')
+  await loadOwners()
+  await loadProperties()
+}
+
+async function loadOwners() {
+  const { data } = await db.from('owners').select('*').eq('pm_id', currentUser.id).order('name')
+  owners = data || []
+  document.getElementById('ownerCount').textContent = `${owners.length} owner${owners.length !== 1 ? 's' : ''}`
+  renderOwnerTable()
+
+  const sel = document.getElementById('p-owner')
+  sel.innerHTML = '<option value="">No owner</option>' +
+    owners.map(o => `<option value="${o.id}">${o.name}</option>`).join('')
+}
+
+async function loadProperties() {
+  const { data } = await db
+    .from('properties')
+    .select('*, owners(name), units(id)')
+    .eq('pm_id', currentUser.id)
+    .order('name')
+  properties = data || []
+  renderPropTable()
+}
+
+function renderOwnerTable() {
+  const tbody = document.getElementById('ownerTable')
+  if (owners.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:40px;color:rgba(15,23,42,0.35);font-size:0.82rem;">No owners yet</td></tr>'
+    return
+  }
+  tbody.innerHTML = owners.map(o => {
+    const propCount = properties.filter(p => p.owner_id === o.id).length
+    return `
+    <tr>
+      <td>
+        <div class="name-cell">
+          <div class="avatar" style="background:${avatarColor(o.name)}">${initials(o.name)}</div>
+          <span class="fw-700">${o.name}</span>
+        </div>
+      </td>
+      <td class="td-muted">${o.email || '—'}</td>
+      <td class="td-muted">${o.phone || '—'}</td>
+      <td><span class="tag">${propCount} propert${propCount !== 1 ? 'ies' : 'y'}</span></td>
+      <td class="td-muted truncate" style="max-width:180px;">${o.notes || '—'}</td>
+      <td><button class="btn btn-ghost btn-sm" onclick="openView('${o.id}')">Edit</button></td>
+    </tr>`
+  }).join('')
+}
+
+function renderPropTable() {
+  const tbody = document.getElementById('propTable')
+  if (properties.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:40px;color:rgba(15,23,42,0.35);font-size:0.82rem;">No properties yet</td></tr>'
+    return
+  }
+  tbody.innerHTML = properties.map(p => {
+    const addr = [p.address, p.city, p.state].filter(Boolean).join(', ')
+    return `
+    <tr>
+      <td class="fw-700">${p.name}</td>
+      <td class="td-muted">${p.owners?.name || '—'}</td>
+      <td class="td-muted">${addr || '—'}</td>
+      <td><span class="tag">${p.units?.length || 0} units</span></td>
+      <td><button class="btn btn-danger btn-sm" onclick="deleteProperty('${p.id}')">Remove</button></td>
+    </tr>`
+  }).join('')
+}
+
+async function addOwner() {
+  const name = document.getElementById('a-name').value.trim()
+  if (!name) { toast('Name is required', 'error'); return }
+  const btn = document.getElementById('addOwnerBtn')
+  btnLoad(btn, true)
+  const { error } = await db.from('owners').insert({
+    pm_id: currentUser.id,
+    name,
+    phone: document.getElementById('a-phone').value || null,
+    email: document.getElementById('a-email').value || null,
+    notes: document.getElementById('a-notes').value || null,
+  })
+  btnLoad(btn, false)
+  if (error) { toast(error.message, 'error'); return }
+  toast('Owner added')
+  closeModal('addModal')
+  document.getElementById('addModal').querySelectorAll('input,textarea').forEach(el => el.value = '')
+  await loadOwners()
+}
+
+function openView(id) {
+  const o = owners.find(x => x.id === id)
+  if (!o) return
+  editingOwnerId = id
+  document.getElementById('viewTitle').textContent = o.name
+  document.getElementById('viewBody').innerHTML = `
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Full Name</label><input class="form-input" id="v-name" value="${o.name}"/></div>
+      <div class="form-group"><label class="form-label">Phone</label><input class="form-input" id="v-phone" value="${o.phone || ''}"/></div>
+    </div>
+    <div class="form-group"><label class="form-label">Email</label><input class="form-input" type="email" id="v-email" value="${o.email || ''}"/></div>
+    <div class="form-group"><label class="form-label">Notes</label><textarea class="form-textarea" id="v-notes">${o.notes || ''}</textarea></div>
+  `
+  openModal('viewModal')
+}
+
+async function saveOwner() {
+  const btn = document.getElementById('saveOwnerBtn')
+  btnLoad(btn, true)
+  const { error } = await db.from('owners').update({
+    name: document.getElementById('v-name').value,
+    phone: document.getElementById('v-phone').value || null,
+    email: document.getElementById('v-email').value || null,
+    notes: document.getElementById('v-notes').value || null,
+  }).eq('id', editingOwnerId)
+  btnLoad(btn, false)
+  if (error) { toast(error.message, 'error'); return }
+  toast('Saved')
+  closeModal('viewModal')
+  await loadOwners()
+}
+
+async function deleteOwner() {
+  if (!confirm('Delete this owner? Their properties will be unlinked.')) return
+  await db.from('owners').delete().eq('id', editingOwnerId)
+  toast('Owner deleted')
+  closeModal('viewModal')
+  await loadOwners()
+  await loadProperties()
+}
+
+async function addProperty() {
+  const name = document.getElementById('p-name').value.trim()
+  if (!name) { toast('Property name is required', 'error'); return }
+  const btn = document.getElementById('addPropBtn')
+  btnLoad(btn, true)
+  const { error } = await db.from('properties').insert({
+    pm_id: currentUser.id,
+    owner_id: document.getElementById('p-owner').value || null,
+    name,
+    address: document.getElementById('p-addr').value || null,
+    city: document.getElementById('p-city').value || null,
+    state: document.getElementById('p-state').value || null,
+    zip: document.getElementById('p-zip').value || null,
+  })
+  btnLoad(btn, false)
+  if (error) { toast(error.message, 'error'); return }
+  toast('Property added')
+  closeModal('addPropModal')
+  document.getElementById('addPropModal').querySelectorAll('input,select').forEach(el => el.value = el.tagName === 'SELECT' ? '' : '')
+  await loadProperties()
+}
+
+async function deleteProperty(id) {
+  if (!confirm('Remove this property? Units will be deleted too.')) return
+  await db.from('properties').delete().eq('id', id)
+  toast('Property removed')
+  await loadProperties()
+}
+
+function openModal(id) { document.getElementById(id).classList.add('open') }
+function closeModal(id) { document.getElementById(id).classList.remove('open') }
+document.querySelectorAll('.modal-backdrop').forEach(b => b.addEventListener('click', e => { if (e.target === b) b.classList.remove('open') }))
+
+init()
+</script>
+</body>
+</html>

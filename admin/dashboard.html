@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Dashboard — BMP Central</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="css/admin.css"/>
+</head>
+<body>
+<div class="admin-layout">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main-wrap">
+    <header class="topbar" id="topbar"></header>
+    <main class="main-content">
+
+      <!-- Stats -->
+      <div class="stats-grid" id="statsGrid">
+        <div class="stat-card">
+          <div class="stat-icon stat-icon--blue">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-2 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
+          </div>
+          <div class="stat-n" id="s-units">—</div>
+          <div class="stat-l">Total Units</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon stat-icon--green">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+          </div>
+          <div class="stat-n" id="s-tenants">—</div>
+          <div class="stat-l">Active Tenants</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon stat-icon--red">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+          </div>
+          <div class="stat-n" id="s-maint">—</div>
+          <div class="stat-l">Open Requests</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon stat-icon--yellow">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          </div>
+          <div class="stat-n" id="s-rent">—</div>
+          <div class="stat-l">Rent Collected</div>
+        </div>
+      </div>
+
+      <div class="grid-2">
+
+        <!-- Recent Maintenance -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Open Maintenance</span>
+            <a href="maintenance.html" class="btn btn-ghost btn-sm">View all</a>
+          </div>
+          <div class="card-body card-body--flush">
+            <table>
+              <thead>
+                <tr><th>Issue</th><th>Tenant</th><th>Priority</th><th>Opened</th></tr>
+              </thead>
+              <tbody id="maintTable">
+                <tr class="loading-row"><td colspan="4">Loading…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Recent Messages -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Unread Messages</span>
+            <a href="messages.html" class="btn btn-ghost btn-sm">View all</a>
+          </div>
+          <div class="card-body card-body--flush" id="msgList">
+            <div style="padding:32px;text-align:center;color:rgba(15,23,42,0.35);font-size:0.82rem;">Loading…</div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Rent snapshot -->
+      <div class="card mt-6">
+        <div class="card-header">
+          <span class="card-title">This Month's Rent</span>
+          <a href="rent.html" class="btn btn-ghost btn-sm">Manage</a>
+        </div>
+        <div class="card-body card-body--flush">
+          <table>
+            <thead>
+              <tr><th>Tenant</th><th>Unit</th><th>Amount</th><th>Status</th><th>Due</th></tr>
+            </thead>
+            <tbody id="rentTable">
+              <tr class="loading-row"><td colspan="5">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Seed button (shown only when no data) -->
+      <div id="seedWrap" style="display:none;margin-top:28px;text-align:center;">
+        <div class="card" style="display:inline-block;padding:32px 40px;text-align:center;">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color:rgba(15,23,42,0.25);margin:0 auto 12px;display:block;"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z"/></svg>
+          <div style="font-weight:700;color:#0f172a;margin-bottom:6px;">No data yet</div>
+          <div style="font-size:0.82rem;color:rgba(15,23,42,0.45);margin-bottom:20px;">Load demo data to see the dashboard in action</div>
+          <button class="btn btn-primary" onclick="loadSeed()">Load demo data</button>
+        </div>
+      </div>
+
+    </main>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/config.js"></script>
+<script src="js/utils.js"></script>
+<script src="js/layout.js"></script>
+<script>
+let currentUser = null
+
+async function init() {
+  currentUser = await requireAuth()
+  if (!currentUser) return
+  await renderLayout('dashboard', 'Dashboard')
+  await loadStats()
+  await loadMaintenance()
+  await loadMessages()
+  await loadRent()
+}
+
+async function loadStats() {
+  const uid = currentUser.id
+
+  const [unitRes, tenantRes, maintRes, rentRes] = await Promise.all([
+    db.from('units').select('id, property_id, properties!inner(pm_id)').eq('properties.pm_id', uid),
+    db.from('tenants').select('id', { count: 'exact', head: true }).eq('pm_id', uid).eq('status', 'active'),
+    db.from('maintenance_requests').select('id', { count: 'exact', head: true }).eq('pm_id', uid).in('status', ['open','in_progress']),
+    db.from('rent_payments').select('amount').eq('pm_id', uid).eq('status', 'paid').gte('due_date', firstOfMonth()).lte('due_date', lastOfMonth()),
+  ])
+
+  document.getElementById('s-units').textContent = unitRes.data?.length ?? 0
+  document.getElementById('s-tenants').textContent = tenantRes.count ?? 0
+  document.getElementById('s-maint').textContent = maintRes.count ?? 0
+
+  const collected = (rentRes.data || []).reduce((s, r) => s + (r.amount || 0), 0)
+  document.getElementById('s-rent').textContent = fmt$(collected)
+
+  if ((unitRes.data?.length ?? 0) === 0) {
+    document.getElementById('seedWrap').style.display = 'block'
+  }
+}
+
+async function loadMaintenance() {
+  const { data } = await db
+    .from('maintenance_requests')
+    .select('id, title, priority, status, created_at, tenants(name)')
+    .eq('pm_id', currentUser.id)
+    .in('status', ['open','in_progress'])
+    .order('created_at', { ascending: false })
+    .limit(5)
+
+  const tbody = document.getElementById('maintTable')
+  if (!data || data.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:32px;color:rgba(15,23,42,0.35);font-size:0.82rem;">No open requests</td></tr>'
+    return
+  }
+  tbody.innerHTML = data.map(r => `
+    <tr>
+      <td><span class="fw-700">${r.title}</span></td>
+      <td class="td-muted">${r.tenants?.name || '—'}</td>
+      <td>${statusBadge(r.priority)}</td>
+      <td class="td-muted">${timeAgo(r.created_at)}</td>
+    </tr>`).join('')
+}
+
+async function loadMessages() {
+  const { data } = await db
+    .from('messages')
+    .select('id, body, created_at, read, tenants(id, name)')
+    .eq('pm_id', currentUser.id)
+    .eq('sender', 'tenant')
+    .eq('read', false)
+    .order('created_at', { ascending: false })
+    .limit(6)
+
+  const wrap = document.getElementById('msgList')
+  if (!data || data.length === 0) {
+    wrap.innerHTML = '<div style="padding:32px;text-align:center;color:rgba(15,23,42,0.35);font-size:0.82rem;">No unread messages</div>'
+    return
+  }
+  wrap.innerHTML = data.map(m => `
+    <a href="messages.html" style="text-decoration:none;">
+      <div style="display:flex;align-items:center;gap:12px;padding:14px 20px;border-bottom:1px solid rgba(15,23,42,0.05);cursor:pointer;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background=''">
+        <div class="avatar" style="background:${avatarColor(m.tenants?.name)}">${initials(m.tenants?.name)}</div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:0.82rem;font-weight:700;color:#0f172a;">${m.tenants?.name || 'Unknown'}</div>
+          <div class="truncate" style="font-size:0.75rem;color:rgba(15,23,42,0.5);margin-top:1px;">${m.body}</div>
+        </div>
+        <div style="font-size:0.65rem;color:rgba(15,23,42,0.35);">${timeAgo(m.created_at)}</div>
+      </div>
+    </a>`).join('')
+}
+
+async function loadRent() {
+  const { data } = await db
+    .from('rent_payments')
+    .select('id, amount, due_date, status, paid_date, tenants(name, units(unit_number))')
+    .eq('pm_id', currentUser.id)
+    .gte('due_date', firstOfMonth())
+    .lte('due_date', lastOfMonth())
+    .order('status')
+    .limit(8)
+
+  const tbody = document.getElementById('rentTable')
+  if (!data || data.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:32px;color:rgba(15,23,42,0.35);font-size:0.82rem;">No rent records for this month</td></tr>'
+    return
+  }
+  tbody.innerHTML = data.map(r => `
+    <tr>
+      <td>
+        <div class="name-cell">
+          <div class="avatar" style="width:28px;height:28px;font-size:0.6rem;background:${avatarColor(r.tenants?.name)}">${initials(r.tenants?.name)}</div>
+          <span class="fw-700">${r.tenants?.name || '—'}</span>
+        </div>
+      </td>
+      <td class="td-muted">${r.tenants?.units?.unit_number || '—'}</td>
+      <td class="fw-700">${fmt$(r.amount)}</td>
+      <td>${statusBadge(r.status)}</td>
+      <td class="td-muted">${fmtDateShort(r.due_date)}</td>
+    </tr>`).join('')
+}
+
+function firstOfMonth() {
+  const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`
+}
+function lastOfMonth() {
+  const d = new Date(new Date().getFullYear(), new Date().getMonth()+1, 0)
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+}
+
+async function loadSeed() {
+  await seedDemoData(currentUser.id)
+}
+
+init()
+</script>
+</body>
+</html>
