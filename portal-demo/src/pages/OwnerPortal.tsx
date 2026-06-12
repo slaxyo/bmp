@@ -1,13 +1,4 @@
-import { useState, useRef, useEffect, useCallback, createContext, useContext } from 'react'
-import type { Tenant } from '../data/mockData'
-
-interface OwnerData {
-  allTenants: Tenant[]
-  allProperties: Property[]
-  allTickets: MaintenanceTicket[]
-  ownerName: string
-}
-const OwnerDataCtx = createContext<OwnerData>({ allTenants: [], allProperties: [], allTickets: [], ownerName: 'Owner' })
+import { useState, useRef, useEffect, useCallback } from 'react'
 
 function useLocalState<T>(key: string, def: T): [T, (v: T) => void] {
   const [val, setVal] = useState<T>(() => {
@@ -31,13 +22,8 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, PieChart, Pie, Cell, Legend,
 } from 'recharts'
-import { revenueData, expenseBreakdown } from '../data/mockData'
+import { revenueData, expenseBreakdown, maintenanceTickets, properties, tenants, activityFeed } from '../data/mockData'
 import type { Property, MaintenanceTicket } from '../data/mockData'
-import { supabase } from '../lib/supabase'
-import { useAuth } from '../context/AuthContext'
-import { useProperties } from '../hooks/useProperties'
-import { useMaintenanceTickets } from '../hooks/useMaintenanceTickets'
-import { useTenants } from '../hooks/useTenants'
 import { showToast } from '../components/Toast'
 
 type OwnerTab = 'overview' | 'properties' | 'financials' | 'maintenance' | 'reports'
@@ -239,13 +225,12 @@ function PortfolioHealthModal({ onClose }: { onClose: () => void }) {
 // ─── Tenant Profile Modal ─────────────────────────────────────────────────────
 
 function TenantProfileModal({ tenantId, onClose }: { tenantId: string; onClose: () => void }) {
-  const { allTenants, allTickets } = useContext(OwnerDataCtx)
-  const tenant = allTenants.find(t => t.id === tenantId)
+  const tenant = tenants.find(t => t.id === tenantId)
   if (!tenant) return null
 
   const leaseMs = new Date(tenant.leaseEnd).getTime() - Date.now()
   const daysLeft = Math.max(0, Math.round(leaseMs / 86400000))
-  const propTickets = allTickets.filter(t => t.tenantId === tenant.id)
+  const propTickets = maintenanceTickets.filter(t => t.tenantId === tenant.id)
 
   return (
     <ModalBackdrop onClose={onClose}>
@@ -436,7 +421,6 @@ function TicketDetailModal({ ticket, onClose }: { ticket: MaintenanceTicket; onC
 // ─── Property Manage Sheet ────────────────────────────────────────────────────
 
 function PropertyManageSheet({ property, onClose }: { property: Property; onClose: () => void }) {
-  const { allTenants, allTickets } = useContext(OwnerDataCtx)
   const [manageTab, setManageTab] = useState<'overview' | 'tenants' | 'maintenance' | 'settings'>('overview')
   const [tenantSearch, setTenantSearch] = useState('')
   const [viewTenantId, setViewTenantId] = useState<string | null>(null)
@@ -470,11 +454,11 @@ function PropertyManageSheet({ property, onClose }: { property: Property; onClos
     contactEmail: 'maintenance@bmpcentral.com',
   })
 
-  const propTickets = allTickets.filter(t => t.property === property.name || t.property === property.address)
+  const propTickets = maintenanceTickets.filter(t => t.property === property.name || t.property === property.address)
   const propTenants = property.tenants
 
   const filteredTenants = propTenants.filter(t => {
-    const full = allTenants.find(x => x.id === t.id)
+    const full = tenants.find(x => x.id === t.id)
     const q = tenantSearch.toLowerCase()
     if (!q) return true
     return t.name.toLowerCase().includes(q) ||
@@ -634,7 +618,7 @@ function PropertyManageSheet({ property, onClose }: { property: Property; onClos
                   <p className="text-sm text-gray-400 text-center py-6">No tenants match your search</p>
                 )}
                 {filteredTenants.map(t => {
-                  const full = allTenants.find(x => x.id === t.id)
+                  const full = tenants.find(x => x.id === t.id)
                   return (
                     <button
                       key={t.id}
@@ -935,24 +919,12 @@ function OwnerReportModal({ report, onClose }: { report: ReportData; onClose: ()
 // ─── Overview Tab ─────────────────────────────────────────────────────────────
 
 function OverviewTab({ onShowHealth }: { onShowHealth: () => void }) {
-  const { ownerName } = useContext(OwnerDataCtx)
-  const [activity, setActivity] = useState<{ id: string; type: string; text: string; time: string }[]>([])
-  useEffect(() => {
-    supabase.from('activity_log').select('*').order('created_at', { ascending: false }).limit(5)
-      .then(({ data }) => {
-        if (data) setActivity(data.map(a => ({
-          id: a.id, type: a.type, text: a.text,
-          time: new Date(a.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-        })))
-      })
-  }, [])
-  const greeting = new Date().getHours() < 12 ? 'Good morning' : new Date().getHours() < 17 ? 'Good afternoon' : 'Good evening'
   return (
     <div className="p-6 space-y-6 max-w-5xl mx-auto">
       {/* Greeting + health */}
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-black text-gray-900">{greeting}, {ownerName.split(' ')[0]} 👋</h2>
+          <h2 className="text-2xl font-black text-gray-900">Good morning, James 👋</h2>
           <p className="text-sm text-gray-500 mt-1">Wednesday, June 11, 2026 · Austin, TX</p>
           <p className="text-sm text-gray-500 mt-3 max-w-sm">Your portfolio is performing well. <strong>11 of 12 units occupied</strong> and all rents collected this month.</p>
           <div className="flex gap-3 mt-4">
@@ -998,8 +970,7 @@ function OverviewTab({ onShowHealth }: { onShowHealth: () => void }) {
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
           <h3 className="text-sm font-bold text-gray-900 mb-4">Recent Activity</h3>
           <div className="space-y-3">
-            {activity.length === 0 && <p className="text-sm text-gray-400">No recent activity</p>}
-            {activity.map(a => (
+            {activityFeed.slice(0, 5).map(a => (
               <div key={a.id} className="flex items-start gap-3">
                 <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${a.type === 'payment' ? 'bg-green-500' : a.type === 'ticket' ? 'bg-amber-500' : 'bg-blue-500'}`} />
                 <div>
@@ -1038,19 +1009,17 @@ function OverviewTab({ onShowHealth }: { onShowHealth: () => void }) {
 // ─── Properties Tab ───────────────────────────────────────────────────────────
 
 function PropertiesTab() {
-  const { allTenants, allProperties } = useContext(OwnerDataCtx)
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [tenantSearch, setTenantSearch] = useState<Record<string, string>>({})
   const [managingProperty, setManagingProperty] = useState<Property | null>(null)
   const [viewTenantId, setViewTenantId] = useState<string | null>(null)
   const dropdownRefs = useRef<Record<string, HTMLDivElement | null>>({})
-  const properties = allProperties
 
   function getFilteredTenants(p: Property) {
     const q = (tenantSearch[p.id] ?? '').toLowerCase()
     if (!q) return p.tenants
     return p.tenants.filter(t => {
-      const full = allTenants.find(x => x.id === t.id)
+      const full = tenants.find(x => x.id === t.id)
       return t.name.toLowerCase().includes(q) ||
         t.unit.toLowerCase().includes(q) ||
         (full?.email ?? '').toLowerCase().includes(q) ||
@@ -1149,7 +1118,7 @@ function PropertiesTab() {
                     <p className="text-xs text-gray-400 text-center py-2">No matches</p>
                   )}
                   {filtered.map(t => {
-                    const full = allTenants.find(x => x.id === t.id)
+                    const full = tenants.find(x => x.id === t.id)
                     return (
                       <button
                         key={t.id}
@@ -1275,13 +1244,13 @@ function FinancialsTab() {
 // ─── Maintenance Tab ──────────────────────────────────────────────────────────
 
 function OwnerMaintenanceTab() {
-  const { allTickets, allProperties } = useContext(OwnerDataCtx)
   const [viewTicket, setViewTicket] = useState<MaintenanceTicket | null>(null)
 
-  const costByProperty = allProperties.map(p => ({
-    property: p.name.replace('Drive', 'Dr').replace('Lane', 'Ln').replace('Court', 'Ct'),
-    cost: allTickets.filter(t => t.property === p.name).reduce((s, t) => s + (t.cost ?? 0), 0),
-  }))
+  const costByProperty = [
+    { property: '14 Oakwood Dr', cost: 120 },
+    { property: '7 Maple Lane', cost: 220 },
+    { property: '12 Elmwood Ct', cost: 0 },
+  ]
 
   const priorityBadge = (p: string) => {
     const map: Record<string, string> = { emergency: 'bg-red-100 text-red-700', high: 'bg-orange-100 text-orange-700', medium: 'bg-amber-100 text-amber-700', low: 'bg-gray-100 text-gray-600' }
@@ -1319,7 +1288,7 @@ function OwnerMaintenanceTab() {
           <table className="w-full">
             <thead><tr className="border-b border-gray-100">{['Ticket','Property','Priority','Status','Cost'].map(h => <th key={h} className="text-left px-5 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider">{h}</th>)}</tr></thead>
             <tbody>
-              {allTickets.map(t => (
+              {maintenanceTickets.map(t => (
                 <tr
                   key={t.id}
                   onClick={() => setViewTicket(t)}
@@ -1442,26 +1411,8 @@ function ReportsTab() {
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function OwnerPortal() {
-  const { user, signOut } = useAuth()
-  const { data: propertiesData } = useProperties()
-  const { data: tenantsData } = useTenants()
-  const { data: ticketsData } = useMaintenanceTickets()
   const [activeTab, setActiveTab] = useLocalState<OwnerTab>('bmp_owner_tab', 'overview')
   const [showHealthModal, setShowHealthModal] = useState(false)
-
-  const [allProperties, setAllProperties] = useState<Property[]>([])
-  const [allTenants, setAllTenants] = useState<Tenant[]>([])
-  const [allTickets, setAllTickets] = useState<MaintenanceTicket[]>([])
-  useEffect(() => { if (propertiesData.length) setAllProperties(propertiesData) }, [propertiesData])
-  useEffect(() => { if (tenantsData.length) setAllTenants(tenantsData) }, [tenantsData])
-  useEffect(() => { if (ticketsData.length) setAllTickets(ticketsData) }, [ticketsData])
-
-  const ownerName = user?.user_metadata?.full_name || user?.email || 'Owner'
-
-  const totalUnits = allProperties.reduce((s, p) => s + p.units, 0)
-  const totalOccupied = allProperties.reduce((s, p) => s + p.occupied, 0)
-  const totalRevenue = allProperties.reduce((s, p) => s + p.monthlyIncome, 0)
-  const openTickets = allTickets.filter(t => t.status !== 'resolved').length
 
   const tabs: { id: OwnerTab; label: string; icon: React.ReactNode }[] = [
     { id: 'overview', label: 'Overview', icon: <Home className="w-4 h-4" /> },
@@ -1472,16 +1423,15 @@ export default function OwnerPortal() {
   ]
 
   const summaryStats = [
-    { label: 'Properties', value: String(allProperties.length || '—'), color: 'text-blue-600' },
-    { label: 'Total Units', value: String(totalUnits || '—'), color: 'text-gray-900' },
-    { label: 'Occupied', value: totalUnits ? `${totalOccupied}/${totalUnits}` : '—', color: 'text-green-600' },
-    { label: 'Monthly Revenue', value: totalRevenue ? `$${totalRevenue.toLocaleString()}` : '—', color: 'text-emerald-600' },
-    { label: 'Net Income', value: totalRevenue ? `$${Math.round(totalRevenue * 0.917).toLocaleString()}` : '—', color: 'text-blue-700' },
-    { label: 'Open Tickets', value: String(openTickets), color: openTickets > 0 ? 'text-amber-600' : 'text-gray-500' },
+    { label: 'Properties', value: '3', color: 'text-blue-600' },
+    { label: 'Total Units', value: '12', color: 'text-gray-900' },
+    { label: 'Occupied', value: '11/12', color: 'text-green-600' },
+    { label: 'Monthly Revenue', value: '$14,400', color: 'text-emerald-600' },
+    { label: 'Net Income', value: '$13,196', color: 'text-blue-700' },
+    { label: 'Open Tickets', value: '2', color: 'text-amber-600' },
   ]
 
   return (
-    <OwnerDataCtx.Provider value={{ allTenants, allProperties, allTickets, ownerName }}>
     <div className="min-h-screen bg-gray-50 flex flex-col">
       {/* Header */}
       <header className="bg-white border-b border-gray-200 px-6 h-14 flex items-center justify-between sticky top-0 z-30 shadow-sm">
@@ -1498,16 +1448,11 @@ export default function OwnerPortal() {
           <button className="w-8 h-8 rounded-lg bg-gray-50 hover:bg-gray-100 flex items-center justify-center transition-colors">
             <Bell className="w-4 h-4 text-gray-500" />
           </button>
-          <button
-            onClick={async () => { await signOut() }}
-            className="flex items-center gap-2 pl-2 pr-3 py-1 rounded-full border border-gray-200 hover:border-red-200 hover:bg-red-50 transition-all"
-          >
-            <div className="w-6 h-6 rounded-full flex items-center justify-center text-white font-black text-[10px]" style={{ background: 'linear-gradient(135deg, #7C3AED, #4C1D95)' }}>
-              {ownerName.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()}
-            </div>
-            <span className="text-xs font-bold text-gray-700">{ownerName.split(' ')[0]}</span>
+          <div className="flex items-center gap-2 pl-2 pr-3 py-1 rounded-full border border-gray-200 hover:border-gray-300 hover:bg-gray-50 transition-all cursor-pointer">
+            <div className="w-6 h-6 rounded-full flex items-center justify-center text-white font-black text-[10px]" style={{ background: 'linear-gradient(135deg, #7C3AED, #4C1D95)' }}>JO</div>
+            <span className="text-xs font-bold text-gray-700">James</span>
             <ChevronDown className="w-3 h-3 text-gray-400" />
-          </button>
+          </div>
         </div>
       </header>
 
@@ -1557,6 +1502,5 @@ export default function OwnerPortal() {
 
       {showHealthModal && <PortfolioHealthModal onClose={() => setShowHealthModal(false)} />}
     </div>
-    </OwnerDataCtx.Provider>
   )
 }

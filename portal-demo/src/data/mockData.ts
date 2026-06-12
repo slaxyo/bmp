@@ -5,7 +5,6 @@ export interface Tenant {
   name: string
   unit: string
   property: string
-  propertyId?: string
   rent: number
   leaseEnd: string
   status: 'current' | 'late' | 'notice'

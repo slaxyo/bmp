@@ -1,20 +1,16 @@
-import { useState, useRef, useEffect, createContext, useContext } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import {
   Home, DollarSign, Wrench, MessageSquare, FileText, Bell,
   ChevronRight, Check, X, Plus, Send, Smile, Paperclip,
   Edit2, MoreHorizontal, Upload, CreditCard, Building2, Search,
 } from 'lucide-react'
-import type { Tenant } from '../data/mockData'
-import { supabase } from '../lib/supabase'
-import { useCurrentTenant } from '../hooks/useTenants'
-import { useMaintenanceTickets } from '../hooks/useMaintenanceTickets'
-import { useRentRecords } from '../hooks/useRentRecords'
-import { useThreads } from '../hooks/useThreads'
-import { useMessages } from '../hooks/useMessages'
+import type { ChatMessage } from '../data/mockData'
+import { tenants, chatMessages, maintenanceTickets, messageThreads } from '../data/mockData'
 import { showToast } from '../components/Toast'
 
-// ─── Tenant Context ───────────────────────────────────────────────────────────
-const TenantCtx = createContext<{ tenant: Tenant | null; tenantId: string | null; pmId: string | null; unitId: string | null }>({ tenant: null, tenantId: null, pmId: null, unitId: null })
+// ─── Demo tenant ──────────────────────────────────────────────────────────────
+
+const tenant = tenants.find((t) => t.id === 't-1')!
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -46,6 +42,21 @@ interface PaymentRow {
   status: string
 }
 
+interface LocalTicket {
+  id: string
+  tenantId: string
+  tenantName: string
+  unit: string
+  property: string
+  category: string
+  title: string
+  description: string
+  priority: 'low' | 'medium' | 'high' | 'emergency'
+  status: 'open' | 'in_progress' | 'resolved'
+  createdAt: string
+  updatedAt: string
+}
+
 interface DocItem {
   id: string
   name: string
@@ -67,6 +78,16 @@ function useLocalState<T>(key: string, def: T): [T, (v: T) => void] {
 // ─── Timestamp helpers ────────────────────────────────────────────────────────
 
 const DAY_MS = 86400000
+
+function parseSentAt(timestamp: string): number {
+  if (timestamp === 'Just now') return Date.now()
+  const datePart = timestamp.split('·')[0].trim()
+  try {
+    const d = new Date(datePart)
+    if (!isNaN(d.getTime())) return d.getTime()
+  } catch { /* fall through */ }
+  return Date.now() - DAY_MS * 3
+}
 
 function formatSentAt(ms: number): string {
   const diff = Date.now() - ms
@@ -603,7 +624,6 @@ function PayRentModal({
 // ─── Receipt Modal ────────────────────────────────────────────────────────────
 
 function ReceiptModal({ row, onClose }: { row: PaymentRow; onClose: () => void }) {
-  const { tenant } = useContext(TenantCtx)
   const year = row.datePaid.split(', ')[1] ?? '2026'
   const monthNum =
     ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].indexOf(
@@ -630,8 +650,8 @@ function ReceiptModal({ row, onClose }: { row: PaymentRow; onClose: () => void }
           <div className="bg-gray-50 rounded-xl p-4 space-y-2 text-sm">
             <div className="flex justify-between"><span className="text-gray-500">Receipt #</span><span className="font-mono font-semibold text-gray-900">{receiptNo}</span></div>
             <div className="flex justify-between"><span className="text-gray-500">From</span><span className="font-semibold text-gray-900">BMP Central</span></div>
-            <div className="flex justify-between"><span className="text-gray-500">To</span><span className="font-semibold text-gray-900">{tenant?.name ?? '—'}</span></div>
-            <div className="flex justify-between"><span className="text-gray-500">Unit</span><span className="font-semibold text-gray-900">Unit {tenant?.unit ?? '—'}, {tenant?.property ?? '—'}</span></div>
+            <div className="flex justify-between"><span className="text-gray-500">To</span><span className="font-semibold text-gray-900">{tenant.name}</span></div>
+            <div className="flex justify-between"><span className="text-gray-500">Unit</span><span className="font-semibold text-gray-900">Unit {tenant.unit}, {tenant.property}</span></div>
             <div className="h-px bg-gray-200" />
             <div className="flex justify-between"><span className="text-gray-500">Description</span><span className="font-semibold text-gray-900">Monthly Rent — {row.month}</span></div>
             <div className="flex justify-between"><span className="text-gray-500">Amount</span><span className="text-xl font-black text-gray-900">${row.amount.toLocaleString()}.00</span></div>
@@ -700,27 +720,20 @@ function DocPreviewModal({ doc, onClose }: { doc: DocItem; onClose: () => void }
 // ─── Overview Tab ─────────────────────────────────────────────────────────────
 
 function OverviewTab({ onNewTicket }: { onNewTicket: () => void }) {
-  const { tenant, tenantId } = useContext(TenantCtx)
-  const { data: tickets } = useMaintenanceTickets(undefined, tenantId ?? undefined)
-  const openCount = tickets.filter((t) => t.status !== 'resolved').length
+  const myTickets = maintenanceTickets.filter((t) => t.tenantId === 't-1')
+  const openCount = myTickets.filter((t) => t.status !== 'resolved').length
 
-  const leaseEndMs = tenant ? new Date(tenant.leaseEnd).getTime() : 0
-  const daysRemaining = tenant ? Math.ceil((leaseEndMs - Date.now()) / DAY_MS) : 0
+  const leaseEndMs = new Date(tenant.leaseEnd).getTime()
+  const daysRemaining = Math.ceil((leaseEndMs - Date.now()) / DAY_MS)
   const leaseBarColor =
     daysRemaining > 180 ? 'bg-green-500' : daysRemaining > 90 ? 'bg-amber-500' : 'bg-red-500'
   const leaseBarPct = Math.max(0, Math.min(100, (daysRemaining / 365) * 100))
 
-  if (!tenant) {
-    return (
-      <div className="p-5 space-y-5">
-        <div className="bg-gray-200 animate-pulse rounded-2xl h-32" />
-        <div className="grid grid-cols-2 gap-4">
-          <div className="bg-gray-100 animate-pulse rounded-xl h-24" />
-          <div className="bg-gray-100 animate-pulse rounded-xl h-24" />
-        </div>
-      </div>
-    )
-  }
+  const recentActivity = [
+    { icon: '💰', text: `June 2026 rent paid — $${tenant.rent.toLocaleString()}`, time: '2 hours ago' },
+    { icon: '🔧', text: 'Maintenance request submitted: Kitchen faucet leaking', time: '5 hours ago' },
+    { icon: '💬', text: 'New message from BMP Central re: plumber visit', time: 'Jun 8' },
+  ]
 
   return (
     <div className="p-5 space-y-5">
@@ -741,11 +754,12 @@ function OverviewTab({ onNewTicket }: { onNewTicket: () => void }) {
       {/* Stats row */}
       <div className="grid grid-cols-2 gap-4">
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Monthly Rent</p>
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">June 2026 Rent</p>
           <div className="flex items-center gap-2 mb-1">
             <span className="text-2xl font-black text-gray-900">${tenant.rent.toLocaleString()}</span>
+            <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs font-bold rounded-full">Paid ✓</span>
           </div>
-          <p className="text-xs text-gray-400">Due on the 1st of each month</p>
+          <p className="text-xs text-gray-400">Paid Jun 1, 2026 · ACH</p>
         </div>
 
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
@@ -793,23 +807,21 @@ function OverviewTab({ onNewTicket }: { onNewTicket: () => void }) {
         <p className="text-xs text-gray-400 mt-1.5">Lease ends {tenant.leaseEnd}</p>
       </div>
 
-      {/* Open tickets */}
-      {openCount > 0 && (
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
-          <h3 className="text-base font-bold text-gray-900 mb-3">Open Requests</h3>
-          <div className="space-y-2">
-            {tickets.filter(t => t.status !== 'resolved').slice(0, 3).map((t) => (
-              <div key={t.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
-                <Wrench className="w-4 h-4 text-amber-500 shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900 truncate">{t.title}</p>
-                  <p className="text-xs text-gray-400">{t.status === 'in_progress' ? 'In progress' : 'Open'}</p>
-                </div>
+      {/* Recent activity */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+        <h3 className="text-base font-bold text-gray-900 mb-3">Recent Activity</h3>
+        <div className="space-y-3">
+          {recentActivity.map((item, i) => (
+            <div key={i} className="flex items-start gap-3">
+              <span className="text-lg shrink-0">{item.icon}</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-gray-700">{item.text}</p>
+                <p className="text-xs text-gray-400 mt-0.5">{item.time}</p>
               </div>
-            ))}
-          </div>
+            </div>
+          ))}
         </div>
-      )}
+      </div>
     </div>
   )
 }
@@ -817,8 +829,31 @@ function OverviewTab({ onNewTicket }: { onNewTicket: () => void }) {
 // ─── Maintenance Tab ──────────────────────────────────────────────────────────
 
 function MaintenanceListTab({ onNew }: { onNew: () => void }) {
-  const { tenantId } = useContext(TenantCtx)
-  const { data: myTickets } = useMaintenanceTickets(undefined, tenantId ?? undefined)
+  const seedTickets: LocalTicket[] = maintenanceTickets
+    .filter((t) => t.tenantId === 't-1')
+    .map((t) => ({ ...t }))
+
+  const [myTickets, setMyTickets] = useState<LocalTicket[]>(seedTickets)
+
+  // Expose append for parent — stored in ref so parent can call after modal closes
+  const appendTicketRef = useRef<((data: MaintenanceFormStep1 & MaintenanceFormStep2) => void) | null>(null)
+  appendTicketRef.current = (data) => {
+    const newT: LocalTicket = {
+      id: `MT-${String(Math.floor(Math.random() * 900) + 100)}`,
+      tenantId: 't-1',
+      tenantName: tenant.name,
+      unit: tenant.unit,
+      property: tenant.property,
+      category: data.issueType || 'Other',
+      title: data.title,
+      description: data.description,
+      priority: 'medium',
+      status: 'open',
+      createdAt: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+      updatedAt: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+    }
+    setMyTickets((prev) => [newT, ...prev])
+  }
 
   const timelineSteps = ['Submitted', 'Assigned', 'In Progress', 'Resolved']
 
@@ -919,38 +954,29 @@ function MaintenanceListTab({ onNew }: { onNew: () => void }) {
 // ─── Payments Tab ─────────────────────────────────────────────────────────────
 
 function PaymentsTab() {
-  const { tenant, tenantId, pmId } = useContext(TenantCtx)
-  const { data: rentRecords, refetch: refetchRent } = useRentRecords(tenantId ?? undefined)
   const [autopay, setAutopay] = useState(true)
   const [receiptRow, setReceiptRow] = useState<PaymentRow | null>(null)
   const [showPayRent, setShowPayRent] = useState(false)
 
-  const cashFlowRows: PaymentRow[] = rentRecords.map((r) => ({
-    month: r.month,
-    amount: r.amount,
-    datePaid: r.datePaid || '—',
-    method: r.method || 'ACH',
-    status: r.status,
-  }))
+  const [cashFlowRows, setCashFlowRows] = useState<PaymentRow[]>([
+    { month: 'Jun 2026', amount: tenant.rent, datePaid: 'Jun 1, 2026', method: 'ACH', status: 'paid' },
+    { month: 'May 2026', amount: tenant.rent, datePaid: 'May 1, 2026', method: 'ACH', status: 'paid' },
+    { month: 'Apr 2026', amount: tenant.rent, datePaid: 'Apr 1, 2026', method: 'ACH', status: 'paid' },
+    { month: 'Mar 2026', amount: tenant.rent, datePaid: 'Mar 1, 2026', method: 'ACH', status: 'paid' },
+    { month: 'Feb 2026', amount: tenant.rent, datePaid: 'Feb 1, 2026', method: 'ACH', status: 'paid' },
+    { month: 'Jan 2026', amount: tenant.rent, datePaid: 'Jan 2, 2026', method: 'ACH', status: 'paid' },
+    { month: 'Dec 2025', amount: tenant.rent, datePaid: 'Dec 1, 2025', method: 'ACH', status: 'paid' },
+    { month: 'Nov 2025', amount: tenant.rent, datePaid: 'Nov 1, 2025', method: 'ACH', status: 'paid' },
+  ])
 
-  async function handlePaySuccess(method: string, amt: number) {
-    if (tenantId) {
-      const today = new Date()
-      await supabase.from('rent_payments').insert({
-        pm_id: pmId,
-        tenant_id: tenantId,
-        amount: amt,
-        due_date: today.toISOString().slice(0, 10),
-        paid_date: today.toISOString().slice(0, 10),
-        status: 'paid',
-        note: method,
-      })
-      await refetchRent()
-    }
+  function handlePaySuccess(method: string, amt: number) {
+    const today = new Date()
+    const dateStr = today.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    const monthStr = today.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+    const newRow: PaymentRow = { month: monthStr, amount: amt, datePaid: dateStr, method, status: 'paid' }
+    setCashFlowRows((prev) => [newRow, ...prev])
     showToast({ type: 'success', title: `Payment of $${amt.toLocaleString()} confirmed` })
   }
-
-  const rentAmount = tenant?.rent ?? 0
 
   return (
     <div className="p-6 space-y-5">
@@ -960,20 +986,25 @@ function PaymentsTab() {
         className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-bold py-4 rounded-2xl text-base shadow-lg transition-all flex items-center justify-center gap-3"
       >
         <DollarSign className="w-5 h-5" />
-        Pay Rent{rentAmount > 0 ? ` — $${rentAmount.toLocaleString()}` : ''}
+        Pay Rent — ${tenant.rent.toLocaleString()}
       </button>
 
       {/* Current month card */}
       <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-2xl p-6 text-white">
         <div className="flex items-start justify-between mb-4">
           <div>
-            <p className="text-blue-200 text-xs font-semibold uppercase tracking-wider mb-1">Monthly Rent</p>
-            <p className="text-5xl font-black tracking-tight mt-1">${rentAmount.toLocaleString()}</p>
+            <p className="text-blue-200 text-xs font-semibold uppercase tracking-wider mb-1">June 2026 Rent</p>
+            <p className="text-5xl font-black tracking-tight mt-1">${tenant.rent.toLocaleString()}</p>
           </div>
+          <span className="flex items-center gap-1.5 px-3 py-1.5 bg-green-400 text-green-900 text-xs font-black rounded-full uppercase tracking-wide">
+            <span className="w-1.5 h-1.5 bg-green-700 rounded-full" />
+            PAID
+          </span>
         </div>
-        <div className="grid grid-cols-2 gap-4 mt-4 pt-4 border-t border-blue-500">
-          <div><p className="text-blue-300 text-xs">Lease Start</p><p className="text-white font-semibold text-sm mt-0.5">{tenant?.moveIn ?? '—'}</p></div>
-          <div><p className="text-blue-300 text-xs">Lease End</p><p className="text-white font-semibold text-sm mt-0.5">{tenant?.leaseEnd ?? '—'}</p></div>
+        <div className="grid grid-cols-3 gap-4 mt-4 pt-4 border-t border-blue-500">
+          <div><p className="text-blue-300 text-xs">Due Date</p><p className="text-white font-semibold text-sm mt-0.5">June 15, 2026</p></div>
+          <div><p className="text-blue-300 text-xs">Next Payment</p><p className="text-white font-semibold text-sm mt-0.5">July 15, 2026</p></div>
+          <div><p className="text-blue-300 text-xs">Amount Due</p><p className="text-white font-semibold text-sm mt-0.5">${tenant.rent.toLocaleString()}</p></div>
         </div>
         <div className="flex items-center justify-between mt-4 pt-3 border-t border-blue-500">
           <span className="text-sm text-blue-100">
@@ -1001,49 +1032,45 @@ function PaymentsTab() {
         <div className="px-5 py-4 border-b border-gray-100">
           <h3 className="font-semibold text-gray-900">Payment History</h3>
         </div>
-        {cashFlowRows.length === 0 ? (
-          <div className="px-5 py-8 text-center text-gray-400 text-sm">No payment records yet.</div>
-        ) : (
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-gray-100">
-                {['Month','Amount','Date Paid','Method','Status','Receipt'].map((h) => (
-                  <th key={h} className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {cashFlowRows.map((r, i) => (
-                <tr key={i} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
-                  <td className="px-5 py-3 text-sm font-medium text-gray-900">{r.month}</td>
-                  <td className="px-5 py-3 text-sm font-semibold text-gray-900">${r.amount.toLocaleString()}</td>
-                  <td className="px-5 py-3 text-sm text-gray-600">{r.datePaid}</td>
-                  <td className="px-5 py-3 text-sm text-gray-600">{r.method}</td>
-                  <td className="px-5 py-3">
-                    <span className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold rounded-full ${
-                      r.status === 'paid' ? 'bg-green-100 text-green-700 ring-1 ring-green-200' :
-                      r.status === 'late' ? 'bg-red-100 text-red-700 ring-1 ring-red-200' :
-                      r.status === 'pending' ? 'bg-amber-100 text-amber-700 ring-1 ring-amber-200' :
-                      'bg-gray-100 text-gray-600 ring-1 ring-gray-200'
-                    }`}>
-                      <span className={`w-1.5 h-1.5 rounded-full ${
-                        r.status === 'paid' ? 'bg-green-500' :
-                        r.status === 'late' ? 'bg-red-500' :
-                        r.status === 'pending' ? 'bg-amber-500' : 'bg-gray-400'
-                      }`} />
-                      {r.status.charAt(0).toUpperCase() + r.status.slice(1)}
-                    </span>
-                  </td>
-                  <td className="px-5 py-3">
-                    <button onClick={() => setReceiptRow(r)} className="text-xs font-semibold text-blue-600 hover:text-blue-700">
-                      Download
-                    </button>
-                  </td>
-                </tr>
+        <table className="w-full">
+          <thead>
+            <tr className="border-b border-gray-100">
+              {['Month','Amount','Date Paid','Method','Status','Receipt'].map((h) => (
+                <th key={h} className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">{h}</th>
               ))}
-            </tbody>
-          </table>
-        )}
+            </tr>
+          </thead>
+          <tbody>
+            {cashFlowRows.map((r, i) => (
+              <tr key={i} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
+                <td className="px-5 py-3 text-sm font-medium text-gray-900">{r.month}</td>
+                <td className="px-5 py-3 text-sm font-semibold text-gray-900">${r.amount.toLocaleString()}</td>
+                <td className="px-5 py-3 text-sm text-gray-600">{r.datePaid}</td>
+                <td className="px-5 py-3 text-sm text-gray-600">{r.method}</td>
+                <td className="px-5 py-3">
+                  <span className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold rounded-full ${
+                    r.status === 'paid' ? 'bg-green-100 text-green-700 ring-1 ring-green-200' :
+                    r.status === 'late' ? 'bg-red-100 text-red-700 ring-1 ring-red-200' :
+                    r.status === 'pending' ? 'bg-amber-100 text-amber-700 ring-1 ring-amber-200' :
+                    'bg-gray-100 text-gray-600 ring-1 ring-gray-200'
+                  }`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${
+                      r.status === 'paid' ? 'bg-green-500' :
+                      r.status === 'late' ? 'bg-red-500' :
+                      r.status === 'pending' ? 'bg-amber-500' : 'bg-gray-400'
+                    }`} />
+                    {r.status.charAt(0).toUpperCase() + r.status.slice(1)}
+                  </span>
+                </td>
+                <td className="px-5 py-3">
+                  <button onClick={() => setReceiptRow(r)} className="text-xs font-semibold text-blue-600 hover:text-blue-700">
+                    Download
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
 
       {/* Bottom two-col */}
@@ -1053,16 +1080,16 @@ function PaymentsTab() {
           <div className="space-y-3 text-sm">
             <div className="flex justify-between">
               <span className="text-gray-500">Lease Term</span>
-              <span className="font-semibold">{tenant?.moveIn ?? '—'} – {tenant?.leaseEnd ?? '—'}</span>
+              <span className="font-semibold">{tenant.moveIn} – {tenant.leaseEnd}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-500">Monthly Rent</span>
-              <span className="font-semibold text-green-600">${rentAmount.toLocaleString()}</span>
+              <span className="font-semibold text-green-600">${tenant.rent.toLocaleString()}</span>
             </div>
             <div className="h-px bg-gray-100" />
             <div className="flex justify-between">
               <span className="text-gray-500">Security Deposit</span>
-              <span className="font-semibold">${rentAmount.toLocaleString()} · Held on file</span>
+              <span className="font-semibold">${tenant.rent.toLocaleString()} · Held on file</span>
             </div>
           </div>
         </div>
@@ -1089,7 +1116,7 @@ function PaymentsTab() {
       {receiptRow && <ReceiptModal row={receiptRow} onClose={() => setReceiptRow(null)} />}
       {showPayRent && (
         <PayRentModal
-          amount={rentAmount}
+          amount={tenant.rent}
           onClose={() => setShowPayRent(false)}
           onSuccess={handlePaySuccess}
         />
@@ -1109,15 +1136,15 @@ const EMOJI_LIST = [
 
 // ─── Messages Tab — iMessage style ───────────────────────────────────────────
 
+type ExtendedMessage = ChatMessage & { sentAt: number }
+
 function TenantMessagesTab() {
-  const { tenantId, pmId } = useContext(TenantCtx)
-  const { data: dbThreads } = useThreads(tenantId ?? undefined, 'tenant')
-  const [selectedThreadId, setSelectedThreadId] = useState<null | string>(null)
+  const [localThreads, setLocalThreads] = useState(() => messageThreads.map((t) => ({ ...t })))
+  const [selectedThreadId, setSelectedThreadId] = useState<string>('thread-1')
 
-  const firstThreadId = dbThreads[0]?.id ?? null
-  const activeThreadId = selectedThreadId ?? firstThreadId
-
-  const { data: messages } = useMessages(activeThreadId ?? null)
+  const [messages, setMessages] = useState<ExtendedMessage[]>(() =>
+    chatMessages.map((m) => ({ ...m, sentAt: parseSentAt(m.timestamp) }))
+  )
 
   const [compose, setCompose] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -1133,27 +1160,16 @@ function TenantMessagesTab() {
   const emojiRef = useRef<HTMLDivElement>(null)
   const composeRef = useRef<HTMLTextAreaElement>(null)
 
-  const activeThread = dbThreads.find((t) => t.id === activeThreadId) ?? null
-  const threadMessages = messages
-  const filteredThreads = dbThreads.filter((t) =>
+  const activeThread = localThreads.find((t) => t.id === selectedThreadId) ?? null
+  const threadMessages = messages.filter((m) => m.threadId === selectedThreadId)
+  const filteredThreads = localThreads.filter((t) =>
     t.tenantName.toLowerCase().includes(threadSearch.toLowerCase()) ||
     t.tenantUnit.toLowerCase().includes(threadSearch.toLowerCase())
   )
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [threadMessages.length, activeThreadId])
-
-  // Opening the thread marks the PM's messages as read
-  useEffect(() => {
-    if (!activeThreadId || !pmId) return
-    supabase.from('messages')
-      .update({ read: true })
-      .eq('tenant_id', activeThreadId)
-      .eq('sender', 'pm')
-      .eq('read', false)
-      .then(() => {})
-  }, [activeThreadId, pmId])
+  }, [threadMessages.length, selectedThreadId])
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -1163,17 +1179,28 @@ function TenantMessagesTab() {
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
 
-  async function sendMessage() {
+  function sendMessage() {
     if (!compose.trim() && attachments.length === 0) return
-    if (!activeThreadId || !pmId) return
     const text = [compose.trim(), ...attachments.map((a) => `📎 ${a.name} (${a.size})`)].filter(Boolean).join('\n')
-    await supabase.from('messages').insert({
-      pm_id: pmId,
-      tenant_id: activeThreadId,
-      sender: 'tenant',
-      body: text,
-      read: false,
-    })
+    const newMsg: ExtendedMessage = {
+      id: `msg-${Date.now()}`,
+      threadId: selectedThreadId,
+      senderId: 'tenant',
+      senderName: tenant.name,
+      text,
+      timestamp: 'Just now',
+      sentAt: Date.now(),
+      edited: false,
+      unsent: false,
+    }
+    setMessages((prev) => [...prev, newMsg])
+    setLocalThreads((prev) =>
+      prev.map((t) =>
+        t.id === selectedThreadId
+          ? { ...t, lastMessage: text.slice(0, 50), lastTime: 'Just now', unread: 0 }
+          : t
+      )
+    )
     setCompose('')
     setAttachments([])
   }
@@ -1202,13 +1229,15 @@ function TenantMessagesTab() {
     e.target.value = ''
   }
 
-  async function saveEdit(id: string) {
-    await supabase.from('messages').update({ body: editText }).eq('id', id)
+  function saveEdit(id: string) {
+    setMessages((prev) =>
+      prev.map((m) => m.id === id ? { ...m, edited: true, originalText: m.text, text: editText } : m)
+    )
     setEditingId(null)
   }
 
-  async function unsendMessage(id: string) {
-    await supabase.from('messages').delete().eq('id', id)
+  function unsendMessage(id: string) {
+    setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, unsent: true } : m)))
     setMenuOpenId(null)
   }
 
@@ -1234,9 +1263,10 @@ function TenantMessagesTab() {
               key={thread.id}
               onClick={() => {
                 setSelectedThreadId(thread.id)
+                setLocalThreads((prev) => prev.map((t) => t.id === thread.id ? { ...t, unread: 0 } : t))
               }}
               className={`w-full text-left px-4 py-3 border-b border-gray-100 hover:bg-white transition-colors ${
-                activeThreadId === thread.id ? 'bg-white border-l-2 border-l-blue-500' : ''
+                selectedThreadId === thread.id ? 'bg-white border-l-2 border-l-blue-500' : ''
               }`}
             >
               <div className="flex items-start gap-3">
@@ -1549,23 +1579,8 @@ function TenantDocumentsTab() {
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function TenantPortal() {
-  const { data: tenant, tenantId, pmId, unitId } = useCurrentTenant()
   const [activeTab, setActiveTab] = useLocalState<Tab>('bmp_tenant_tab', 'overview')
   const [showMaintenanceModal, setShowMaintenanceModal] = useState(false)
-
-  async function handleTicketSubmit(data: MaintenanceFormStep1 & MaintenanceFormStep2) {
-    if (!tenantId || !pmId) return
-    await supabase.from('maintenance_requests').insert({
-      pm_id: pmId,
-      tenant_id: tenantId,
-      unit_id: unitId,
-      title: data.title,
-      description: data.description,
-      priority: (data.priority as 'low' | 'medium' | 'high' | 'emergency') || 'medium',
-      status: 'open',
-    })
-    setShowMaintenanceModal(false)
-  }
 
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
     { id: 'overview', label: 'Overview', icon: <Home className="w-4 h-4" /> },
@@ -1578,7 +1593,6 @@ export default function TenantPortal() {
   const panelFullHeight = activeTab === 'messages'
 
   return (
-    <TenantCtx.Provider value={{ tenant, tenantId, pmId, unitId }}>
     <div className="min-h-screen bg-gray-50 flex flex-col">
       {/* Header */}
       <header className="bg-white border-b border-gray-200 px-5 py-4 flex items-center justify-between sticky top-0 z-30">
@@ -1596,15 +1610,15 @@ export default function TenantPortal() {
             <Bell className="w-4 h-4 text-gray-500" />
           </button>
           <div className="w-8 h-8 rounded-xl bg-green-500 flex items-center justify-center text-white font-bold text-xs">
-            {tenant ? tenant.name.split(' ').map((p) => p[0]).join('').slice(0, 2).toUpperCase() : '…'}
+            {tenant.name.split(' ').map((p) => p[0]).join('').slice(0, 2).toUpperCase()}
           </div>
         </div>
       </header>
 
       {/* Welcome strip */}
       <div className="bg-white border-b border-gray-100 px-5 py-3">
-        <p className="text-sm font-semibold text-gray-900">{tenant ? `Good morning, ${tenant.name.split(' ')[0]}` : 'Loading…'}</p>
-        <p className="text-xs text-gray-500">{tenant ? `${tenant.property} · Unit ${tenant.unit}` : ''}</p>
+        <p className="text-sm font-semibold text-gray-900">Good morning, {tenant.name.split(' ')[0]}</p>
+        <p className="text-xs text-gray-500">{tenant.property} · Unit {tenant.unit}</p>
       </div>
 
       {/* Tabs */}
@@ -1643,10 +1657,9 @@ export default function TenantPortal() {
       {showMaintenanceModal && (
         <MaintenanceModal
           onClose={() => setShowMaintenanceModal(false)}
-          onSubmit={handleTicketSubmit}
+          onSubmit={() => setShowMaintenanceModal(false)}
         />
       )}
     </div>
-    </TenantCtx.Provider>
   )
 }

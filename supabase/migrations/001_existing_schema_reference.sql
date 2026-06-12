@@ -1,0 +1,79 @@
+-- ─── REFERENCE ONLY — DO NOT RUN ──────────────────────────────────────────────
+-- These 7 tables already exist in the Supabase project. This file documents
+-- their shape (introspected 2026-06-12) so the portal code has a local source
+-- of truth. Every table is scoped to a property manager via pm_id (auth uid).
+--
+-- create table public.properties (
+--   id uuid primary key,
+--   pm_id uuid not null,            -- the PM's auth.users id
+--   owner_id uuid,                  -- references owners(id)
+--   name text not null,
+--   address text, city text, state text, zip text,
+--   created_at timestamptz
+-- );
+--
+-- create table public.units (
+--   id uuid primary key,
+--   property_id uuid not null,      -- references properties(id)
+--   unit_number text not null,
+--   bedrooms int, bathrooms numeric, sqft int,
+--   rent_amount numeric,
+--   status text,                    -- e.g. 'vacant' | 'occupied'
+--   created_at timestamptz
+-- );
+--
+-- create table public.owners (
+--   id uuid primary key,
+--   pm_id uuid not null,
+--   name text not null,
+--   email text, phone text, notes text,
+--   created_at timestamptz
+-- );
+--
+-- create table public.tenants (
+--   id uuid primary key,            -- the tenant's auth uid when self-registered;
+--                                   -- a random uuid when the PM creates the row first
+--   pm_id uuid not null,
+--   unit_id uuid,                   -- references units(id)
+--   name text not null,
+--   email text, phone text,
+--   lease_start date, lease_end date,
+--   monthly_rent numeric,
+--   status text,                    -- 'current' | 'late' | 'notice'
+--   notes text,
+--   created_at timestamptz
+-- );
+--
+-- create table public.maintenance_requests (
+--   id uuid primary key,
+--   pm_id uuid not null,
+--   tenant_id uuid,                 -- references tenants(id)
+--   unit_id uuid,                   -- references units(id)
+--   title text not null,
+--   description text,
+--   priority text,                  -- 'low' | 'medium' | 'high' | 'emergency'
+--   status text,                    -- 'open' | 'in_progress' | 'resolved'
+--   created_at timestamptz, updated_at timestamptz
+-- );
+--
+-- create table public.rent_payments (
+--   id uuid primary key,
+--   pm_id uuid not null,
+--   tenant_id uuid not null,        -- references tenants(id)
+--   amount numeric not null,
+--   due_date date not null,
+--   paid_date date,
+--   status text,                    -- 'paid' | 'late' | 'pending'
+--   note text,
+--   created_at timestamptz
+-- );
+--
+-- create table public.messages (
+--   id uuid primary key,
+--   pm_id uuid not null,
+--   tenant_id uuid not null,        -- references tenants(id); doubles as the thread id
+--   sender text not null,           -- 'pm' | 'tenant'
+--   body text not null,
+--   read boolean,
+--   created_at timestamptz
+-- );

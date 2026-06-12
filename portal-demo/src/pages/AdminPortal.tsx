@@ -6,7 +6,7 @@ import {
   Smile, Paperclip, Edit2, Home, DollarSign, Bell, X,
   Eye, EyeOff, Camera, Pencil, CheckCircle, LogOut, HelpCircle,
   Keyboard, TrendingUp, BarChart2, AlertTriangle, Search, ChevronUp, ChevronDown,
-  CreditCard, Receipt, AlertCircle,
+  CreditCard, Receipt,
 } from 'lucide-react'
 import {
   XAxis, YAxis, CartesianGrid, Tooltip,
@@ -14,17 +14,15 @@ import {
   PieChart, Pie, Cell, Legend,
 } from 'recharts'
 import type { Thread, ChatMessage, Tenant, MaintenanceTicket, Property, RentRecord } from '../data/mockData'
-import { occupancyData, revenueData, ticketsByMonth, ticketsByType, activityFeed as mockActivityFeed } from '../data/mockData'
-import { useDemoMode } from '../context/DemoModeContext'
-import { supabase } from '../lib/supabase'
-import { useAuth } from '../context/AuthContext'
-import { useTenants } from '../hooks/useTenants'
-import { useProperties } from '../hooks/useProperties'
-import { useMaintenanceTickets } from '../hooks/useMaintenanceTickets'
-import { useRentRecords } from '../hooks/useRentRecords'
-import { useThreads } from '../hooks/useThreads'
-import { useMessages } from '../hooks/useMessages'
-import { useDocuments } from '../hooks/useDocuments'
+import {
+  tenants as initialTenants,
+  maintenanceTickets as initialTickets,
+  properties as initialProperties,
+  rentRecords as initialRentRecords,
+  activityFeed, occupancyData, revenueData,
+  messageThreads, chatMessages,
+  ticketsByMonth, ticketsByType,
+} from '../data/mockData'
 import { showToast } from '../components/Toast'
 
 // ─── Sidebar Nav Items ────────────────────────────────────────────────────────
@@ -62,25 +60,6 @@ function Avatar({ name, photo, size = 'md' }: { name: string; photo?: string | n
 }
 
 // ─── Modal Backdrop ───────────────────────────────────────────────────────────
-
-// Units are first-class rows in the DB; tenants link via unit_id
-async function findOrCreateUnit(propertyId: string, unitNumber: string, rent: number | null): Promise<string | null> {
-  const { data: existing } = await supabase
-    .from('units')
-    .select('id')
-    .eq('property_id', propertyId)
-    .eq('unit_number', unitNumber)
-    .maybeSingle()
-  if (existing) return existing.id as string
-  const { data: { user } } = await supabase.auth.getUser()
-  const { data: created, error } = await supabase
-    .from('units')
-    .insert({ property_id: propertyId, unit_number: unitNumber, rent_amount: rent, status: 'occupied', pm_id: user?.id })
-    .select('id')
-    .single()
-  if (error) return null
-  return created.id as string
-}
 
 function ModalBackdrop({ onClose, children }: { onClose: () => void; children: React.ReactNode }) {
   return (
@@ -120,41 +99,23 @@ function InviteTenantModal({ properties, onClose, onAdd }: InviteTenantModalProp
     return e
   }
 
-  async function handleSubmit() {
+  function handleSubmit() {
     const e = validate()
     if (Object.keys(e).length > 0) { setErrors(e); return }
-    const selectedProp = properties.find(p => p.id === form.property)
-    const { data: { user: pmUser } } = await supabase.auth.getUser()
-    const unitId = await findOrCreateUnit(form.property, form.unit.trim(), Number(form.rent))
-    const { data, error } = await supabase.from('tenants').insert({
-      id: crypto.randomUUID(),
-      pm_id: pmUser!.id,
-      unit_id: unitId,
-      name: form.name.trim(),
-      email: form.email.trim(),
-      phone: form.phone.trim(),
-      monthly_rent: Number(form.rent),
-      lease_start: form.leaseStart || null,
-      lease_end: form.leaseEnd || new Date(Date.now() + 365 * 24 * 3600 * 1000).toISOString().slice(0, 10),
-      status: 'current',
-      notes: form.notes.trim() || null,
-    }).select().single()
-    if (error) { showToast({ type: 'error', title: 'Failed to add tenant: ' + error.message }); return }
     const newTenant: Tenant = {
-      id: data.id,
+      id: `t-${Date.now()}`,
       name: form.name.trim(),
       email: form.email.trim(),
       phone: form.phone.trim(),
       unit: form.unit.trim(),
-      property: selectedProp?.name ?? '',
-      propertyId: form.property,
+      property: form.property,
       rent: Number(form.rent),
       leaseEnd: form.leaseEnd || 'TBD',
       status: 'current',
       moveIn: form.leaseStart || new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
     }
     onAdd(newTenant)
-    showToast({ type: 'success', title: `Tenant ${form.name} added` })
+    showToast({ type: 'success', title: `Tenant ${form.name} invited` })
     onClose()
   }
 
@@ -214,7 +175,7 @@ function InviteTenantModal({ properties, onClose, onAdd }: InviteTenantModalProp
                 <select value={form.property} onChange={(e) => setForm({ ...form, property: e.target.value })}
                   className={`w-full px-3 py-2 text-sm border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white ${errors.property ? 'border-red-400' : 'border-gray-200'}`}>
                   <option value="">Select property…</option>
-                  {properties.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  {properties.map((p) => <option key={p.id} value={p.name}>{p.name}</option>)}
                 </select>
                 {errors.property && <p className="text-xs text-red-500 mt-0.5">{errors.property}</p>}
               </div>
@@ -290,40 +251,15 @@ function AddPropertyModal({ onClose, onAdd }: AddPropertyModalProps) {
     setStep(s => s + 1)
   }
 
-  async function handleSubmit() {
-    const name = form.propertyName.trim() || form.address.trim()
-    const { data: { user: pmUser } } = await supabase.auth.getUser()
-    const { data, error } = await supabase.from('properties').insert({
-      pm_id: pmUser!.id,
-      name,
-      address: form.address.trim(),
-      city: form.city.trim(),
-      state: form.state.trim() || 'TX',
-      zip: form.zip?.trim() || '',
-      mortgage_payment: form.mortgage ? Number(form.mortgage) : null,
-      tax_monthly: form.tax ? Number(form.tax) : null,
-      insurance_monthly: form.insurance ? Number(form.insurance) : null,
-    }).select().single()
-    if (error) { showToast({ type: 'error', title: 'Failed to add property: ' + error.message }); return }
-    // Unit count lives in the units table, not on properties — create one row per unit
-    const unitCount = Number(form.units) || 1
-    await supabase.from('units').insert(
-      Array.from({ length: unitCount }, (_, i) => ({
-        property_id: data.id,
-        pm_id: pmUser!.id,
-        unit_number: String(i + 1),
-        rent_amount: form.targetRent ? Number(form.targetRent) : null,
-        status: 'vacant',
-      }))
-    )
+  function handleSubmit() {
     const newProp: Property = {
-      id: data.id,
-      name,
+      id: `prop-${Date.now()}`,
+      name: form.propertyName.trim() || form.address.trim(),
       address: form.address.trim(),
       city: `${form.city}, ${form.state}`,
       units: Number(form.units),
       occupied: 0,
-      monthlyIncome: form.targetRent ? Number(form.targetRent) * Number(form.units) : 0,
+      monthlyIncome: 0,
       openTickets: 0,
       tenants: [],
     }
@@ -461,29 +397,19 @@ function NewTicketModal({ tenants, onClose, onAdd }: NewTicketModalProps) {
   const [form, setForm] = useState({ tenantId: '', issueType: '', priority: '', summary: '', description: '' })
   const [errors, setErrors] = useState<Record<string, string>>({})
 
-  async function handleSubmit() {
+  function handleSubmit() {
     const e: Record<string, string> = {}
     if (!form.summary.trim()) e.summary = 'Required'
     if (!form.issueType) e.issueType = 'Required'
     if (!form.priority) e.priority = 'Required'
     if (Object.keys(e).length > 0) { setErrors(e); return }
     const tenant = tenants.find((t) => t.id === form.tenantId)
+    const today = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
     const priorityMap: Record<string, MaintenanceTicket['priority']> = {
       Low: 'low', Medium: 'medium', High: 'high', Urgent: 'emergency',
     }
-    const { data: { user: pmUser } } = await supabase.auth.getUser()
-    const { data, error } = await supabase.from('maintenance_requests').insert({
-      pm_id: pmUser!.id,
-      tenant_id: tenant?.id ?? null,
-      title: form.summary.trim(),
-      description: form.description.trim(),
-      priority: priorityMap[form.priority] ?? 'medium',
-      status: 'open',
-    }).select().single()
-    if (error) { showToast({ type: 'error', title: 'Failed to create ticket: ' + error.message }); return }
-    const today = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
     const newTicket: MaintenanceTicket = {
-      id: data.id,
+      id: `MT-${String(Math.floor(Math.random() * 900) + 100)}`,
       tenantId: tenant?.id ?? '',
       tenantName: tenant?.name ?? 'Unassigned',
       unit: tenant?.unit ?? '-',
@@ -497,7 +423,7 @@ function NewTicketModal({ tenants, onClose, onAdd }: NewTicketModalProps) {
       updatedAt: today,
     }
     onAdd(newTicket)
-    showToast({ type: 'success', title: `Ticket ${data.id} created` })
+    showToast({ type: 'success', title: `Ticket ${newTicket.id} created` })
     onClose()
   }
 
@@ -1107,9 +1033,7 @@ const EMOJI_LIST = [
 ]
 
 function MessagesPanel({ threads, setThreads, selectedThreadId, setSelectedThreadId, onNewThread, onViewTenantProfile }: MessagesPanelProps) {
-  const { user } = useAuth()
-  const { demoMode } = useDemoMode()
-  const { data: threadMessages } = useMessages(selectedThreadId)
+  const [messages, setMessages] = useState<ChatMessage[]>(chatMessages)
   const [compose, setCompose] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editText, setEditText] = useState('')
@@ -1124,6 +1048,7 @@ function MessagesPanel({ threads, setThreads, selectedThreadId, setSelectedThrea
   const composeRef = useRef<HTMLTextAreaElement>(null)
 
   const selectedThread = threads.find((t) => t.id === selectedThreadId) ?? null
+  const threadMessages = messages.filter((m) => m.threadId === selectedThreadId)
   const filteredThreads = threads.filter(t =>
     t.tenantName.toLowerCase().includes(threadSearch.toLowerCase()) ||
     t.tenantUnit.toLowerCase().includes(threadSearch.toLowerCase())
@@ -1133,20 +1058,6 @@ function MessagesPanel({ threads, setThreads, selectedThreadId, setSelectedThrea
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [threadMessages.length, selectedThreadId])
 
-  // Opening a thread marks the tenant's messages as read
-  useEffect(() => {
-    if (!selectedThreadId || demoMode) return
-    supabase.from('messages')
-      .update({ read: true })
-      .eq('tenant_id', selectedThreadId)
-      .eq('sender', 'tenant')
-      .eq('read', false)
-      .then(() => {
-        setThreads(prev => prev.map(t => t.id === selectedThreadId ? { ...t, unread: 0 } : t))
-      })
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedThreadId, demoMode])
-
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       if (emojiRef.current && !emojiRef.current.contains(e.target as Node)) setShowEmojiPicker(false)
@@ -1155,29 +1066,34 @@ function MessagesPanel({ threads, setThreads, selectedThreadId, setSelectedThrea
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
 
-  async function sendMessage() {
-    if ((!compose.trim() && attachments.length === 0) || !selectedThreadId || !user) return
+  function sendMessage() {
+    if ((!compose.trim() && attachments.length === 0) || !selectedThreadId) return
     const text = [
       compose.trim(),
       ...attachments.map(a => `📎 ${a.name} (${a.size})`),
     ].filter(Boolean).join('\n')
-    setCompose('')
-    setAttachments([])
-    const { error } = await supabase.from('messages').insert({
-      pm_id: user.id,
-      tenant_id: selectedThreadId,
-      sender: 'pm',
-      body: text,
-      read: false,
-    })
-    if (error) { showToast({ type: 'error', title: 'Failed to send message' }); return }
+    const now = Date.now()
+    const newMsg: ChatMessage = {
+      id: `msg-${now}`,
+      threadId: selectedThreadId,
+      senderId: 'pm',
+      senderName: 'BMP Central',
+      text,
+      timestamp: 'Just now',
+      sentAt: now,
+      edited: false,
+      unsent: false,
+    }
+    setMessages((prev) => [...prev, newMsg])
     setThreads((prev) =>
       prev.map((t) =>
         t.id === selectedThreadId
-          ? { ...t, lastMessage: text.slice(0, 60), lastTime: 'Just now', unread: 0 }
+          ? { ...t, lastMessage: compose.trim() || '📎 Attachment', lastTime: 'Just now', unread: 0 }
           : t
       )
     )
+    setCompose('')
+    setAttachments([])
   }
 
   function insertEmoji(emoji: string) {
@@ -1210,13 +1126,21 @@ function MessagesPanel({ threads, setThreads, selectedThreadId, setSelectedThrea
     setMenuOpenId(null)
   }
 
-  async function saveEdit(id: string) {
-    await supabase.from('messages').update({ body: editText }).eq('id', id)
+  function saveEdit(id: string) {
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === id
+          ? { ...m, edited: true, originalText: m.text, text: editText }
+          : m
+      )
+    )
     setEditingId(null)
   }
 
-  async function unsendMessage(id: string) {
-    await supabase.from('messages').delete().eq('id', id)
+  function unsendMessage(id: string) {
+    setMessages((prev) =>
+      prev.map((m) => (m.id === id ? { ...m, unsent: true } : m))
+    )
     setMenuOpenId(null)
   }
 
@@ -1536,56 +1460,22 @@ interface SettingsPanelProps {
 }
 
 function SettingsPanel({ profileName, setProfileName, profilePhoto, setProfilePhoto }: SettingsPanelProps) {
-  const { demoMode, setDemoMode } = useDemoMode()
-  const { user } = useAuth()
   const [section, setSection] = useState<'account' | 'security' | 'notifications' | 'preferences'>('account')
-  const fileInputRef = useRef<HTMLInputElement>(null)
-
-  // ─── Account ────────────────────────────────────────────────────────────────
-  const [profileLoading, setProfileLoading] = useState(true)
-  const [fullName, setFullName] = useState(profileName)
-  const [email, setEmail] = useState('')
-  const [phone, setPhone] = useState('')
-  const [title, setTitle] = useState('')
-  const [company, setCompany] = useState('')
-  const [bio, setBio] = useState('')
   const [photoPreview, setPhotoPreview] = useState<string | null>(profilePhoto)
-  const [profileSaving, setProfileSaving] = useState(false)
-
-  // ─── Security ───────────────────────────────────────────────────────────────
-  const [currentPw, setCurrentPw] = useState('')
-  const [newPw, setNewPw] = useState('')
-  const [confirmPw, setConfirmPw] = useState('')
-  const [pwLoading, setPwLoading] = useState(false)
-  const [pwError, setPwError] = useState<string | null>(null)
-  const [showCurrentPw, setShowCurrentPw] = useState(false)
-  const [showNewPw, setShowNewPw] = useState(false)
-
-  // 2FA
-  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false)
-  const [mfaStep, setMfaStep] = useState<'idle' | 'qr' | 'verify'>('idle')
-  const [mfaQr, setMfaQr] = useState<string | null>(null)
-  const [mfaSecret, setMfaSecret] = useState<string | null>(null)
-  const [mfaFactorId, setMfaFactorId] = useState<string | null>(null)
-  const [mfaCode, setMfaCode] = useState('')
-  const [mfaLoading, setMfaLoading] = useState(false)
-  const [mfaError, setMfaError] = useState<string | null>(null)
-
-  // ─── Notifications ──────────────────────────────────────────────────────────
-  const [notifPrefs, setNotifPrefs] = useState({
+  const [fullName, setFullName] = useState(profileName)
+  const [email, setEmail] = useState('admin@bmpcentral.com')
+  const [phone, setPhone] = useState('+1 (512) 555-0100')
+  const [title, setTitle] = useState('Property Manager')
+  const [company, setCompany] = useState('BMP Central')
+  const [bio, setBio] = useState('')
+  const [twoFactor, setTwoFactor] = useState(false)
+  const [notifToggles, setNotifToggles] = useState({
     emailMaintenance: true, emailRent: true, emailLease: true, emailMessages: true, emailSystem: false,
     smsMaintenance: false, smsRent: true, smsLease: false, smsMessages: false, smsSystem: false,
     inappMaintenance: true, inappRent: true, inappLease: true, inappMessages: true, inappSystem: true,
   })
-  const [notifSaving, setNotifSaving] = useState(false)
-
-  // ─── Preferences ────────────────────────────────────────────────────────────
-  const [prefLanguage, setPrefLanguage] = useState('English')
-  const [prefTimezone, setPrefTimezone] = useState('America/Chicago')
-  const [prefDateFormat, setPrefDateFormat] = useState('MM/DD/YYYY')
-  const [prefCurrency, setPrefCurrency] = useState('USD')
-  const [prefDarkMode, setPrefDarkMode] = useState(false)
-  const [prefsSaving, setPrefsSaving] = useState(false)
+  const [darkMode, setDarkMode] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const sections = [
     { id: 'account', label: 'Account' },
@@ -1594,157 +1484,20 @@ function SettingsPanel({ profileName, setProfileName, profilePhoto, setProfilePh
     { id: 'preferences', label: 'Preferences' },
   ] as const
 
-  // Load profile from DB
-  useEffect(() => {
-    if (!user) return
-    supabase.from('profiles')
-      .select('full_name, email, phone, title, company, bio, avatar_url, notification_preferences, user_preferences')
-      .eq('id', user.id)
-      .single()
-      .then(({ data }) => {
-        if (data) {
-          const d = data as Record<string, unknown>
-          setFullName((d.full_name as string) || '')
-          setEmail((d.email as string) || user.email || '')
-          setPhone((d.phone as string) || '')
-          setTitle((d.title as string) || '')
-          setCompany((d.company as string) || '')
-          setBio((d.bio as string) || '')
-          setPhotoPreview((d.avatar_url as string | null) || null)
-          if (d.notification_preferences) {
-            setNotifPrefs(prev => ({ ...prev, ...(d.notification_preferences as object) }))
-          }
-          if (d.user_preferences) {
-            const up = d.user_preferences as Record<string, unknown>
-            if (up.language) setPrefLanguage(up.language as string)
-            if (up.timezone) setPrefTimezone(up.timezone as string)
-            if (up.dateFormat) setPrefDateFormat(up.dateFormat as string)
-            if (up.currency) setPrefCurrency(up.currency as string)
-            if (up.darkMode !== undefined) setPrefDarkMode(up.darkMode as boolean)
-          }
-        }
-        setProfileLoading(false)
-      })
-    supabase.auth.mfa.listFactors().then(({ data }) => {
-      const verified = data?.totp?.find(f => f.status === 'verified')
-      setTwoFactorEnabled(!!verified)
-      if (verified) setMfaFactorId(verified.id)
-    })
-  }, [user?.id])
-
-  async function handleSaveProfile() {
-    if (!user) return
-    setProfileSaving(true)
-    const { error } = await supabase.from('profiles')
-      .update({ full_name: fullName, phone, title, company, bio })
-      .eq('id', user.id)
-    if (error) showToast({ type: 'error', title: 'Save failed: ' + error.message })
-    else {
-      setProfileName(fullName)
-      if (photoPreview !== profilePhoto) setProfilePhoto(photoPreview)
-      showToast({ type: 'success', title: 'Profile updated' })
-    }
-    setProfileSaving(false)
-  }
-
-  async function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
+  function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
-    if (!file || !user) return
-    const ext = file.name.split('.').pop() ?? 'jpg'
-    const path = `${user.id}/avatar.${ext}`
-    const { error: upErr } = await supabase.storage.from('avatars').upload(path, file, { upsert: true })
-    if (upErr) { showToast({ type: 'error', title: 'Photo upload failed' }); return }
-    const { data } = supabase.storage.from('avatars').getPublicUrl(path)
-    await supabase.from('profiles').update({ avatar_url: data.publicUrl }).eq('id', user.id)
-    setPhotoPreview(data.publicUrl)
-    setProfilePhoto(data.publicUrl)
-    showToast({ type: 'success', title: 'Profile photo updated' })
-    e.target.value = ''
-  }
-
-  async function handleChangePassword() {
-    if (!newPw) { setPwError('Enter a new password.'); return }
-    if (newPw.length < 8) { setPwError('Password must be at least 8 characters.'); return }
-    if (newPw !== confirmPw) { setPwError('Passwords do not match.'); return }
-    setPwLoading(true); setPwError(null)
-    if (currentPw && user?.email) {
-      const { error: reErr } = await supabase.auth.signInWithPassword({ email: user.email, password: currentPw })
-      if (reErr) { setPwError('Current password is incorrect.'); setPwLoading(false); return }
+    if (file) {
+      const url = URL.createObjectURL(file)
+      setPhotoPreview(url)
+      showToast({ type: 'success', title: 'Profile photo updated' })
     }
-    const { error } = await supabase.auth.updateUser({ password: newPw })
-    if (error) setPwError(error.message)
-    else {
-      setCurrentPw(''); setNewPw(''); setConfirmPw('')
-      showToast({ type: 'success', title: 'Password changed successfully' })
-    }
-    setPwLoading(false)
   }
 
-  async function handleEnable2FA() {
-    setMfaLoading(true); setMfaError(null)
-    const { data, error } = await supabase.auth.mfa.enroll({ factorType: 'totp', issuer: 'BMP Central', friendlyName: 'Authenticator App' })
-    if (error || !data) { setMfaError(error?.message ?? 'Failed to start setup'); setMfaLoading(false); return }
-    setMfaFactorId(data.id)
-    setMfaQr(data.totp.qr_code)
-    setMfaSecret(data.totp.secret)
-    setMfaStep('qr')
-    setMfaLoading(false)
+  function handleSaveProfile() {
+    setProfileName(fullName)
+    setProfilePhoto(photoPreview)
+    showToast({ type: 'success', title: 'Profile updated' })
   }
-
-  async function handleVerify2FA() {
-    if (!mfaFactorId || !mfaCode) return
-    setMfaLoading(true); setMfaError(null)
-    const { data: challenge, error: cErr } = await supabase.auth.mfa.challenge({ factorId: mfaFactorId })
-    if (cErr || !challenge) { setMfaError(cErr?.message ?? 'Challenge failed'); setMfaLoading(false); return }
-    const { error: vErr } = await supabase.auth.mfa.verify({ factorId: mfaFactorId, challengeId: challenge.id, code: mfaCode.replace(/\s/g, '') })
-    if (vErr) { setMfaError('Invalid code. Please try again.'); setMfaLoading(false); return }
-    setTwoFactorEnabled(true); setMfaStep('idle'); setMfaCode('')
-    showToast({ type: 'success', title: '2FA enabled successfully' })
-    setMfaLoading(false)
-  }
-
-  async function handleDisable2FA() {
-    if (!mfaFactorId) return
-    setMfaLoading(true)
-    const { error } = await supabase.auth.mfa.unenroll({ factorId: mfaFactorId })
-    if (error) { showToast({ type: 'error', title: error.message }); setMfaLoading(false); return }
-    setTwoFactorEnabled(false); setMfaFactorId(null)
-    showToast({ type: 'success', title: '2FA disabled' })
-    setMfaLoading(false)
-  }
-
-  async function handleSaveNotifications() {
-    if (!user) return
-    setNotifSaving(true)
-    const { error } = await supabase.from('profiles').update({ notification_preferences: notifPrefs }).eq('id', user.id)
-    if (error) showToast({ type: 'error', title: 'Failed to save' })
-    else showToast({ type: 'success', title: 'Notification preferences saved' })
-    setNotifSaving(false)
-  }
-
-  async function handleSavePreferences() {
-    if (!user) return
-    setPrefsSaving(true)
-    const up = { language: prefLanguage, timezone: prefTimezone, dateFormat: prefDateFormat, currency: prefCurrency, darkMode: prefDarkMode }
-    const { error } = await supabase.from('profiles').update({ user_preferences: up }).eq('id', user.id)
-    if (error) showToast({ type: 'error', title: 'Failed to save' })
-    else showToast({ type: 'success', title: 'Preferences saved' })
-    setPrefsSaving(false)
-  }
-
-  const iField = (label: string, value: string, onChange: (v: string) => void, type = 'text') => (
-    <div>
-      <label className="block text-xs font-semibold text-gray-600 mb-1">{label}</label>
-      <input type={type} value={value} onChange={e => onChange(e.target.value)}
-        className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" />
-    </div>
-  )
-
-  if (profileLoading) return (
-    <div className="flex items-center justify-center h-full">
-      <span className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-    </div>
-  )
 
   return (
     <div className="flex h-full overflow-hidden animate-slide-up">
@@ -1753,8 +1506,15 @@ function SettingsPanel({ profileName, setProfileName, profilePhoto, setProfilePh
         <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 px-2">Settings</p>
         <nav className="space-y-0.5">
           {sections.map((s) => (
-            <button key={s.id} onClick={() => setSection(s.id)}
-              className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors ${section === s.id ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}>
+            <button
+              key={s.id}
+              onClick={() => setSection(s.id)}
+              className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                section === s.id
+                  ? 'bg-blue-50 text-blue-700'
+                  : 'text-gray-600 hover:bg-gray-50'
+              }`}
+            >
               {s.label}
             </button>
           ))}
@@ -1763,61 +1523,106 @@ function SettingsPanel({ profileName, setProfileName, profilePhoto, setProfilePh
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-6">
-
-        {/* ── Account ── */}
         {section === 'account' && (
           <div className="max-w-lg space-y-6">
             <h2 className="text-lg font-bold text-gray-900">Account Settings</h2>
 
+            {/* Photo */}
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
               <h3 className="text-sm font-semibold text-gray-900 mb-4">Profile Photo</h3>
               <div className="flex items-center gap-4">
                 <div className="relative">
-                  {photoPreview
-                    ? <img src={photoPreview} alt="Profile" className="w-16 h-16 rounded-full object-cover" />
-                    : <div className="w-16 h-16 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold text-xl">{fullName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || 'PM'}</div>
-                  }
-                  <button onClick={() => fileInputRef.current?.click()}
-                    className="absolute -bottom-1 -right-1 w-6 h-6 bg-gray-800 rounded-full flex items-center justify-center">
+                  {photoPreview ? (
+                    <img src={photoPreview} alt="Profile" className="w-16 h-16 rounded-full object-cover" />
+                  ) : (
+                    <div className="w-16 h-16 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold text-xl">
+                      PM
+                    </div>
+                  )}
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="absolute -bottom-1 -right-1 w-6 h-6 bg-gray-800 rounded-full flex items-center justify-center"
+                  >
                     <Camera className="w-3.5 h-3.5 text-white" />
                   </button>
                 </div>
                 <div>
                   <p className="text-sm font-medium text-gray-900">Change photo</p>
-                  <p className="text-xs text-gray-500">JPG, PNG up to 5MB · saved to cloud</p>
+                  <p className="text-xs text-gray-500">JPG, PNG up to 5MB</p>
                 </div>
                 <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} />
               </div>
             </div>
 
+            {/* Profile info */}
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
               <h3 className="text-sm font-semibold text-gray-900 mb-4">Profile Information</h3>
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
-                  {iField('Full Name', fullName, setFullName)}
-                  {iField('Title', title, setTitle)}
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Full Name</label>
+                    <input
+                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      value={fullName}
+                      onChange={(e) => setFullName(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Title</label>
+                    <input
+                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      value={title}
+                      onChange={(e) => setTitle(e.target.value)}
+                    />
+                  </div>
                 </div>
-                {iField('Email address', email, setEmail, 'email')}
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Email</label>
+                  <input
+                    type="email"
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                  />
+                </div>
                 <div className="grid grid-cols-2 gap-4">
-                  {iField('Phone number', phone, setPhone, 'tel')}
-                  {iField('Company', company, setCompany)}
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Phone</label>
+                    <input
+                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Company</label>
+                    <input
+                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      value={company}
+                      onChange={(e) => setCompany(e.target.value)}
+                    />
+                  </div>
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1">Bio</label>
-                  <textarea className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 h-20 resize-none"
-                    value={bio} onChange={e => setBio(e.target.value)} placeholder="Brief professional bio…" />
+                  <textarea
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 h-20 resize-none"
+                    value={bio}
+                    onChange={(e) => setBio(e.target.value)}
+                    placeholder="Brief professional bio…"
+                  />
                 </div>
-                <button onClick={handleSaveProfile} disabled={profileSaving}
-                  className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors flex items-center justify-center gap-2">
-                  {profileSaving && <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
-                  {profileSaving ? 'Saving…' : 'Save Changes'}
+                <button
+                  onClick={handleSaveProfile}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors"
+                >
+                  Save Changes
                 </button>
               </div>
             </div>
           </div>
         )}
 
-        {/* ── Security ── */}
         {section === 'security' && (
           <div className="max-w-lg space-y-6">
             <h2 className="text-lg font-bold text-gray-900">Security</h2>
@@ -1825,146 +1630,103 @@ function SettingsPanel({ profileName, setProfileName, profilePhoto, setProfilePh
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
               <h3 className="text-sm font-semibold text-gray-900 mb-4">Change Password</h3>
               <div className="space-y-3">
-                {pwError && (
-                  <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2">
-                    <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
-                    <p className="text-sm text-red-700">{pwError}</p>
-                  </div>
-                )}
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1">Current Password</label>
-                  <div className="relative">
-                    <input type={showCurrentPw ? 'text' : 'password'} value={currentPw} onChange={e => { setCurrentPw(e.target.value); setPwError(null) }}
-                      className="w-full px-3 py-2 pr-10 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="••••••••" />
-                    <button type="button" onClick={() => setShowCurrentPw(!showCurrentPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
-                      {showCurrentPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
+                  <input type="password" className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="••••••••" />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1">New Password</label>
-                  <div className="relative">
-                    <input type={showNewPw ? 'text' : 'password'} value={newPw} onChange={e => { setNewPw(e.target.value); setPwError(null) }}
-                      className="w-full px-3 py-2 pr-10 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Min. 8 characters" />
-                    <button type="button" onClick={() => setShowNewPw(!showNewPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
-                      {showNewPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
+                  <input type="password" className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="••••••••" />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1">Confirm New Password</label>
-                  <input type="password" value={confirmPw} onChange={e => { setConfirmPw(e.target.value); setPwError(null) }}
-                    className={`w-full px-3 py-2 text-sm border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 ${confirmPw && confirmPw !== newPw ? 'border-red-300 bg-red-50' : confirmPw && confirmPw === newPw ? 'border-green-300 bg-green-50' : 'border-gray-200'}`}
-                    placeholder="Re-enter new password" />
+                  <input type="password" className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="••••••••" />
                 </div>
-                <button onClick={handleChangePassword} disabled={pwLoading}
-                  className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors flex items-center justify-center gap-2">
-                  {pwLoading && <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
-                  {pwLoading ? 'Changing…' : 'Change Password'}
+                <button
+                  onClick={() => showToast({ type: 'success', title: 'Password changed' })}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors"
+                >
+                  Change Password
                 </button>
               </div>
             </div>
 
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
-              <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-sm font-semibold text-gray-900">Two-Factor Authentication</h3>
-                  <p className="text-xs text-gray-500 mt-0.5">
-                    {twoFactorEnabled ? 'TOTP authenticator enabled.' : 'Add an extra layer of security using an authenticator app.'}
-                  </p>
+                  <p className="text-xs text-gray-500 mt-0.5">Add an extra layer of security to your account</p>
                 </div>
-                {twoFactorEnabled ? (
-                  <button onClick={handleDisable2FA} disabled={mfaLoading}
-                    className="text-xs font-semibold text-red-600 hover:text-red-700 border border-red-200 px-3 py-1.5 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-50">
-                    {mfaLoading ? 'Disabling…' : 'Disable 2FA'}
-                  </button>
-                ) : mfaStep === 'idle' ? (
-                  <button onClick={handleEnable2FA} disabled={mfaLoading}
-                    className="text-xs font-semibold text-blue-600 hover:text-blue-700 border border-blue-200 px-3 py-1.5 rounded-lg hover:bg-blue-50 transition-colors disabled:opacity-50">
-                    {mfaLoading ? 'Loading…' : 'Enable 2FA'}
-                  </button>
-                ) : null}
+                <button
+                  onClick={() => {
+                    setTwoFactor(!twoFactor)
+                    showToast({ type: 'success', title: `Two-factor authentication ${!twoFactor ? 'enabled' : 'disabled'}` })
+                  }}
+                  className={`relative w-10 h-6 rounded-full transition-colors ${twoFactor ? 'bg-blue-600' : 'bg-gray-200'}`}
+                >
+                  <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${twoFactor ? 'translate-x-4' : 'translate-x-0'}`} />
+                </button>
               </div>
-              {mfaStep === 'qr' && mfaQr && (
-                <div className="mt-3 space-y-3 border-t border-gray-100 pt-4">
-                  <p className="text-xs text-gray-600">Scan this QR code with your authenticator app (Google Authenticator, Authy, etc.)</p>
-                  <div className="flex justify-center">
-                    <img src={mfaQr} alt="2FA QR Code" className="w-40 h-40 rounded-lg border border-gray-200" />
-                  </div>
-                  {mfaSecret && (
-                    <p className="text-center text-xs text-gray-400">
-                      Manual code: <span className="font-mono font-semibold text-gray-700 tracking-wider">{mfaSecret}</span>
-                    </p>
-                  )}
-                  <p className="text-xs text-gray-600">Then enter the 6-digit code from your app:</p>
-                  {mfaError && <p className="text-xs text-red-600">{mfaError}</p>}
-                  <input value={mfaCode} onChange={e => { setMfaCode(e.target.value); setMfaError(null) }}
-                    placeholder="000 000" maxLength={7}
-                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-center tracking-widest font-mono text-lg" />
-                  <div className="flex gap-2">
-                    <button onClick={() => { setMfaStep('idle'); setMfaCode(''); setMfaQr(null); setMfaError(null) }}
-                      className="flex-1 border border-gray-200 text-gray-700 text-sm font-semibold py-2 rounded-xl hover:bg-gray-50 transition-colors">Cancel</button>
-                    <button onClick={handleVerify2FA} disabled={mfaLoading || mfaCode.replace(/\s/g, '').length < 6}
-                      className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-sm font-semibold py-2 rounded-xl transition-colors flex items-center justify-center gap-2">
-                      {mfaLoading && <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
-                      {mfaLoading ? 'Verifying…' : 'Verify & Enable'}
-                    </button>
-                  </div>
-                </div>
-              )}
-              {twoFactorEnabled && (
-                <div className="mt-2 flex items-center gap-2 text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
-                  <CheckCircle className="w-4 h-4 shrink-0" />
-                  Your account is protected with two-factor authentication.
-                </div>
-              )}
             </div>
 
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
               <h3 className="text-sm font-semibold text-gray-900 mb-4">Active Sessions</h3>
               <div className="space-y-3">
-                <div className="flex items-center justify-between py-2">
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">Current browser session</p>
-                    <p className="text-xs text-gray-500">{user?.email}</p>
+                {[
+                  { device: 'Chrome · Austin, TX', time: 'Current session', current: true },
+                  { device: 'Mobile App · Austin, TX', time: '2 hours ago', current: false },
+                ].map((s, i) => (
+                  <div key={i} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">{s.device}</p>
+                      <p className="text-xs text-gray-500">{s.time}</p>
+                    </div>
+                    {s.current && (
+                      <span className="text-xs font-semibold bg-green-100 text-green-700 px-2 py-0.5 rounded-full">Current</span>
+                    )}
                   </div>
-                  <span className="text-xs font-semibold bg-green-100 text-green-700 px-2 py-0.5 rounded-full">Active</span>
-                </div>
+                ))}
               </div>
-              <button onClick={async () => { await supabase.auth.signOut({ scope: 'others' }); showToast({ type: 'success', title: 'Signed out of all other devices' }) }}
-                className="mt-4 w-full border border-gray-200 hover:bg-gray-50 text-gray-700 font-semibold py-2 rounded-xl text-sm transition-colors">
+              <button
+                onClick={() => showToast({ type: 'success', title: 'Signed out of all other devices' })}
+                className="mt-4 w-full border border-gray-200 hover:bg-gray-50 text-gray-700 font-semibold py-2 rounded-xl text-sm transition-colors"
+              >
                 Sign out all other devices
               </button>
             </div>
           </div>
         )}
 
-        {/* ── Notifications ── */}
         {section === 'notifications' && (
           <div className="max-w-lg space-y-6">
             <h2 className="text-lg font-bold text-gray-900">Notification Preferences</h2>
-            {([
-              { group: 'Email Notifications', prefix: 'email' },
-              { group: 'SMS Notifications', prefix: 'sms' },
-              { group: 'In-App Notifications', prefix: 'inapp' },
-            ] as const).map(({ group, prefix }) => (
+            {[
+              { group: 'Email Notifications', prefix: 'email' as const },
+              { group: 'SMS Notifications', prefix: 'sms' as const },
+              { group: 'In-App Notifications', prefix: 'inapp' as const },
+            ].map(({ group, prefix }) => (
               <div key={group} className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
                 <h3 className="text-sm font-semibold text-gray-900 mb-4">{group}</h3>
                 <div className="space-y-3">
-                  {([
-                    { key: 'Maintenance', label: 'Maintenance requests' },
-                    { key: 'Rent', label: 'Rent payments' },
-                    { key: 'Lease', label: 'Lease renewals' },
-                    { key: 'Messages', label: 'New messages' },
-                    { key: 'System', label: 'System updates' },
-                  ] as const).map(({ key, label }) => {
-                    const toggleKey = `${prefix}${key}` as keyof typeof notifPrefs
+                  {[
+                    { key: 'Maintenance' as const, label: 'Maintenance requests' },
+                    { key: 'Rent' as const, label: 'Rent payments' },
+                    { key: 'Lease' as const, label: 'Lease renewals' },
+                    { key: 'Messages' as const, label: 'New messages' },
+                    { key: 'System' as const, label: 'System updates' },
+                  ].map(({ key, label }) => {
+                    const toggleKey = `${prefix}${key}` as keyof typeof notifToggles
                     return (
                       <div key={key} className="flex items-center justify-between">
                         <p className="text-sm text-gray-700">{label}</p>
-                        <button onClick={() => setNotifPrefs(prev => ({ ...prev, [toggleKey]: !prev[toggleKey] }))}
-                          className={`relative w-10 h-6 rounded-full transition-colors ${notifPrefs[toggleKey] ? 'bg-blue-600' : 'bg-gray-200'}`}>
-                          <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${notifPrefs[toggleKey] ? 'translate-x-4' : 'translate-x-0'}`} />
+                        <button
+                          onClick={() => {
+                            setNotifToggles((prev) => ({ ...prev, [toggleKey]: !prev[toggleKey] }))
+                            showToast({ type: 'success', title: `Notification preference updated` })
+                          }}
+                          className={`relative w-10 h-6 rounded-full transition-colors ${notifToggles[toggleKey] ? 'bg-blue-600' : 'bg-gray-200'}`}
+                        >
+                          <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${notifToggles[toggleKey] ? 'translate-x-4' : 'translate-x-0'}`} />
                         </button>
                       </div>
                     )
@@ -1972,32 +1734,28 @@ function SettingsPanel({ profileName, setProfileName, profilePhoto, setProfilePh
                 </div>
               </div>
             ))}
-            <button onClick={handleSaveNotifications} disabled={notifSaving}
-              className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors flex items-center justify-center gap-2">
-              {notifSaving && <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
-              {notifSaving ? 'Saving…' : 'Save Notification Preferences'}
-            </button>
           </div>
         )}
 
-        {/* ── Preferences ── */}
         {section === 'preferences' && (
           <div className="max-w-lg space-y-6">
             <h2 className="text-lg font-bold text-gray-900">Preferences</h2>
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
               <h3 className="text-sm font-semibold text-gray-900 mb-4">Regional Settings</h3>
               <div className="space-y-4">
-                {([
-                  { label: 'Language', value: prefLanguage, setValue: setPrefLanguage, options: ['English', 'Spanish', 'French'] },
-                  { label: 'Timezone', value: prefTimezone, setValue: setPrefTimezone, options: ['America/Chicago', 'America/New_York', 'America/Los_Angeles', 'America/Denver', 'UTC'] },
-                  { label: 'Date Format', value: prefDateFormat, setValue: setPrefDateFormat, options: ['MM/DD/YYYY', 'DD/MM/YYYY', 'YYYY-MM-DD'] },
-                  { label: 'Currency', value: prefCurrency, setValue: setPrefCurrency, options: ['USD', 'EUR', 'GBP', 'CAD'] },
-                ] as const).map(({ label, value, setValue, options }) => (
+                {[
+                  { label: 'Language', defaultVal: 'English' },
+                  { label: 'Timezone', defaultVal: 'America/Chicago' },
+                  { label: 'Date Format', defaultVal: 'MM/DD/YYYY' },
+                  { label: 'Currency', defaultVal: 'USD' },
+                ].map(({ label, defaultVal }) => (
                   <div key={label}>
                     <label className="block text-xs font-semibold text-gray-600 mb-1">{label}</label>
-                    <select value={value} onChange={e => setValue(e.target.value as never)}
-                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
-                      {options.map(o => <option key={o} value={o}>{o}</option>)}
+                    <select
+                      defaultValue={defaultVal}
+                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                    >
+                      <option>{defaultVal}</option>
                     </select>
                   </div>
                 ))}
@@ -2006,49 +1764,26 @@ function SettingsPanel({ profileName, setProfileName, profilePhoto, setProfilePh
                     <p className="text-sm font-medium text-gray-900">Dark Mode</p>
                     <p className="text-xs text-gray-500">Switch to dark theme</p>
                   </div>
-                  <button onClick={() => setPrefDarkMode(!prefDarkMode)}
-                    className={`relative w-10 h-6 rounded-full transition-colors ${prefDarkMode ? 'bg-blue-600' : 'bg-gray-200'}`}>
-                    <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${prefDarkMode ? 'translate-x-4' : 'translate-x-0'}`} />
+                  <button
+                    onClick={() => {
+                      setDarkMode(!darkMode)
+                      showToast({ type: 'success', title: 'Dark mode preference saved' })
+                    }}
+                    className={`relative w-10 h-6 rounded-full transition-colors ${darkMode ? 'bg-blue-600' : 'bg-gray-200'}`}
+                  >
+                    <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${darkMode ? 'translate-x-4' : 'translate-x-0'}`} />
                   </button>
                 </div>
-                <button onClick={handleSavePreferences} disabled={prefsSaving}
-                  className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors flex items-center justify-center gap-2">
-                  {prefsSaving && <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
-                  {prefsSaving ? 'Saving…' : 'Save Preferences'}
+                <button
+                  onClick={() => showToast({ type: 'success', title: 'Preferences saved' })}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors"
+                >
+                  Save Preferences
                 </button>
               </div>
-            </div>
-
-            {/* Test / Demo Mode */}
-            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
-              <h3 className="text-sm font-semibold text-gray-900 mb-1">Developer</h3>
-              <p className="text-xs text-gray-400 mb-4">For testing and demonstration purposes only</p>
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="text-sm font-medium text-gray-900">Test Mode</p>
-                  <p className="text-xs text-gray-500 mt-0.5">
-                    Replace all data with sample records.{' '}
-                    <span className="text-amber-600 font-medium">Shows fake data.</span>
-                    {' '}Your real data is never touched.
-                  </p>
-                </div>
-                <button onClick={() => {
-                    const next = !demoMode; setDemoMode(next)
-                    showToast({ type: next ? 'info' : 'success', title: next ? 'Test mode on — showing fake data' : 'Test mode off — showing real data' })
-                  }}
-                  className={`relative w-10 h-6 rounded-full transition-colors shrink-0 mt-0.5 ${demoMode ? 'bg-amber-400' : 'bg-gray-200'}`}>
-                  <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${demoMode ? 'translate-x-4' : 'translate-x-0'}`} />
-                </button>
-              </div>
-              {demoMode && (
-                <p className="mt-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                  Test mode is <strong>on</strong>. All panels are showing fake data.
-                </p>
-              )}
             </div>
           </div>
         )}
-
       </div>
     </div>
   )
@@ -2143,7 +1878,7 @@ function DashboardPanel({
   const totalUnits = properties.reduce((s, p) => s + p.units, 0)
   const totalOccupied = properties.reduce((s, p) => s + p.occupied, 0)
   const totalRevenue = properties.reduce((s, p) => s + p.monthlyIncome, 0)
-  const currentMonth = new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+  const currentMonth = 'June 2026'
   const collectedIds = new Set(rentRecords.filter(r => r.month === currentMonth && r.status !== 'pending').map(r => r.tenantId))
   const activeTenants = tenants.filter(t => t.status !== 'notice')
   const collectedCount = activeTenants.filter(t => collectedIds.has(t.id)).length
@@ -2191,7 +1926,7 @@ function DashboardPanel({
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
             <h3 className="text-sm font-semibold text-gray-900 mb-4">Occupancy Trend</h3>
             <ResponsiveContainer width="100%" height={180}>
-              <AreaChart data={totalUnits > 0 ? [{ month: new Date().toLocaleString('en-US', { month: 'short' }), rate: Math.round((totalOccupied / totalUnits) * 100) }] : []}>
+              <AreaChart data={occupancyData}>
                 <defs>
                   <linearGradient id="occGrad" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#2563EB" stopOpacity={0.15} />
@@ -2358,7 +2093,7 @@ function TenantsPanel({ tenants, setTenants, rentRecords, threads, setThreads, s
   const [tenantStatusDropdownId, setTenantStatusDropdownId] = useState<string | null>(null)
 
   const today = new Date('2026-06-11')
-  const currentMonth = new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+  const currentMonth = 'June 2026'
 
   // Auto-detect overdue: tenants with no payment record for current month
   const overdueIds = new Set(
@@ -2416,11 +2151,10 @@ function TenantsPanel({ tenants, setTenants, rentRecords, threads, setThreads, s
       {tenantStatusDropdownId === tenantId && (
         <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg py-1 z-20 w-28 animate-fade-in">
           {(['current', 'late', 'notice'] as const).map(st => (
-            <button key={st} onClick={async () => {
+            <button key={st} onClick={() => {
               setTenants(prev => prev.map(t => t.id === tenantId ? { ...t, status: st } : t))
               showToast({ type: 'success', title: `Status updated to ${statusLabels[st]}` })
               setTenantStatusDropdownId(null)
-              await supabase.from('tenants').update({ status: st }).eq('id', tenantId)
             }} className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-2">
               <span className={`w-1.5 h-1.5 rounded-full ${st === 'current' ? 'bg-green-500' : st === 'late' ? 'bg-red-500' : 'bg-amber-500'}`} />
               {statusLabels[st]}
@@ -2432,11 +2166,20 @@ function TenantsPanel({ tenants, setTenants, rentRecords, threads, setThreads, s
   )
 
   function handleMessage(tenant: Tenant) {
-    const existing = threads.find((th) => th.tenantId === tenant.id)
-    if (!existing) {
-      setThreads(prev => [...prev, { id: tenant.id, tenantId: tenant.id, tenantName: tenant.name, tenantUnit: `${tenant.property} · Unit ${tenant.unit}`, unread: 0, lastMessage: '', lastTime: '' }])
+    let thread = threads.find((th) => th.tenantId === tenant.id)
+    if (!thread) {
+      thread = {
+        id: `thread-${Date.now()}`,
+        tenantId: tenant.id,
+        tenantName: tenant.name,
+        tenantUnit: `${tenant.property} · Unit ${tenant.unit}`,
+        unread: 0,
+        lastMessage: '',
+        lastTime: '',
+      }
+      setThreads((prev) => [...prev, thread!])
     }
-    setSelectedThreadId(tenant.id)
+    setSelectedThreadId(thread.id)
     setActivePanel('messages')
   }
 
@@ -2672,13 +2415,12 @@ function MaintenancePanel({ tickets, setTickets, onShowNewTicketModal, focusedTi
         {statusDropdownId === ticketId && (
           <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg py-1 z-20 w-36 animate-fade-in">
             {(['open', 'in_progress', 'resolved'] as const).map(st => (
-              <button key={st} onClick={async (e) => {
+              <button key={st} onClick={(e) => {
                 e.stopPropagation()
                 const tk = tickets.find(t => t.id === ticketId)
                 setTickets(prev => prev.map(t => t.id === ticketId ? { ...t, status: st } : t))
                 showToast({ type: 'success', title: `Status → ${labels[st]}` })
                 if (tk) addActivity?.({ type: 'ticket', text: `${tk.tenantName} · ${tk.title} → ${labels[st]}` })
-                await supabase.from('maintenance_requests').update({ status: st, updated_at: new Date().toISOString() }).eq('id', ticketId)
                 setStatusDropdownId(null)
               }} className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-2">
                 <span className={`w-1.5 h-1.5 rounded-full ${st === 'open' ? 'bg-blue-500' : st === 'in_progress' ? 'bg-amber-500' : 'bg-green-500'}`} />
@@ -2691,12 +2433,11 @@ function MaintenancePanel({ tickets, setTickets, onShowNewTicketModal, focusedTi
     )
   }
 
-  async function markResolved(id: string) {
+  function markResolved(id: string) {
     const tk = tickets.find(t => t.id === id)
     setTickets((prev) => prev.map((t) => (t.id === id ? { ...t, status: 'resolved' as const } : t)))
     showToast({ type: 'success', title: 'Ticket marked as resolved' })
     if (tk) addActivity?.({ type: 'ticket', text: `${tk.tenantName} · ${tk.title} → Resolved` })
-    await supabase.from('maintenance_requests').update({ status: 'resolved', updated_at: new Date().toISOString() }).eq('id', id)
   }
 
   const filtered = tickets.filter(t => {
@@ -2707,24 +2448,13 @@ function MaintenancePanel({ tickets, setTickets, onShowNewTicketModal, focusedTi
     return matchStatus && matchProp && matchPriority && matchCat
   })
 
-  // Compute analytics from real ticket data
-  const ticketMonthMap: Record<string, number> = {}
-  const ticketTypeMap: Record<string, number> = {}
-  const ticketUnitMap: Record<string, number> = {}
-  tickets.forEach(t => {
-    const short = t.createdAt.slice(0, 3)
-    ticketMonthMap[short] = (ticketMonthMap[short] ?? 0) + 1
-    ticketTypeMap[t.category] = (ticketTypeMap[t.category] ?? 0) + 1
-    const unitKey = t.unit || '-'
-    ticketUnitMap[unitKey] = (ticketUnitMap[unitKey] ?? 0) + 1
-  })
-  const TICKET_COLORS = ['#2563EB', '#7C3AED', '#EA580C', '#16A34A', '#6B7280']
-  const computedTicketsByMonth = Object.entries(ticketMonthMap).map(([month, count]) => ({ month, count }))
-  const computedTicketsByType = Object.entries(ticketTypeMap).map(([name, value], i) => ({ name, value, fill: TICKET_COLORS[i % TICKET_COLORS.length] }))
-  const highestUnits = Object.entries(ticketUnitMap)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
-    .map(([unit, count]) => ({ unit, count }))
+  const highestUnits = [
+    { unit: 'Unit 4B', count: 3 },
+    { unit: 'Unit 2A', count: 2 },
+    { unit: 'Unit 3A', count: 2 },
+    { unit: 'Unit 1B', count: 1 },
+    { unit: '1 Elmwood', count: 1 },
+  ]
 
   const hasFilters = filterProperty || filterPriority || filterCategory
 
@@ -2762,10 +2492,10 @@ function MaintenancePanel({ tickets, setTickets, onShowNewTicketModal, focusedTi
         <div className="space-y-4 animate-fade-in">
           <div className="grid grid-cols-4 gap-4">
             {[
-              { label: 'Total (All Time)', value: tickets.length, icon: <BarChart2 className="w-4 h-4" />, color: 'text-blue-600 bg-blue-50' },
+              { label: 'Total (All Time)', value: 9, icon: <BarChart2 className="w-4 h-4" />, color: 'text-blue-600 bg-blue-50' },
               { label: 'Open', value: tickets.filter(t=>t.status==='open').length, icon: <Wrench className="w-4 h-4" />, color: 'text-amber-600 bg-amber-50' },
-              { label: 'In Progress', value: tickets.filter(t=>t.status==='in_progress').length, icon: <TrendingUp className="w-4 h-4" />, color: 'text-green-600 bg-green-50' },
-              { label: 'Resolved', value: tickets.filter(t=>t.status==='resolved').length, icon: <DollarSign className="w-4 h-4" />, color: 'text-purple-600 bg-purple-50' },
+              { label: 'Avg Resolution', value: '3.2d', icon: <TrendingUp className="w-4 h-4" />, color: 'text-green-600 bg-green-50' },
+              { label: 'Cost This Month', value: '$340', icon: <DollarSign className="w-4 h-4" />, color: 'text-purple-600 bg-purple-50' },
             ].map(k => (
               <div key={k.label} className="bg-white rounded-xl border border-gray-200 p-4 flex items-center gap-3">
                 <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${k.color}`}>{k.icon}</div>
@@ -2780,7 +2510,7 @@ function MaintenancePanel({ tickets, setTickets, onShowNewTicketModal, focusedTi
             <div className="bg-white rounded-xl border border-gray-200 p-5">
               <h4 className="text-sm font-semibold text-gray-900 mb-3">Tickets by Month</h4>
               <ResponsiveContainer width="100%" height={160}>
-                <BarChart data={computedTicketsByMonth}>
+                <BarChart data={ticketsByMonth}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
                   <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
                   <YAxis tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
@@ -2793,8 +2523,8 @@ function MaintenancePanel({ tickets, setTickets, onShowNewTicketModal, focusedTi
               <h4 className="text-sm font-semibold text-gray-900 mb-3">By Issue Type</h4>
               <ResponsiveContainer width="100%" height={160}>
                 <PieChart>
-                  <Pie data={computedTicketsByType} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={60}>
-                    {computedTicketsByType.map((entry, i) => <Cell key={i} fill={entry.fill} />)}
+                  <Pie data={ticketsByType} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={60}>
+                    {ticketsByType.map((entry, i) => <Cell key={i} fill={entry.fill} />)}
                   </Pie>
                   <Legend iconSize={10} wrapperStyle={{ fontSize: 11 }} />
                   <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #E5E7EB', fontSize: 12 }} />
@@ -2936,16 +2666,10 @@ function MaintenancePanel({ tickets, setTickets, onShowNewTicketModal, focusedTi
         <EditTicketModal
           ticket={tickets.find(t => t.id === editTicketId)!}
           onClose={() => setEditTicketId(null)}
-          onSave={async (updated) => {
+          onSave={(updated) => {
             setTickets(prev => prev.map(t => t.id === updated.id ? updated : t))
             showToast({ type: 'success', title: `Ticket ${updated.id} updated` })
             addActivity?.({ type: 'ticket', text: `${updated.tenantName} · ${updated.title} updated` })
-            await supabase.from('maintenance_requests').update({
-              priority: updated.priority,
-              description: updated.description,
-              status: updated.status,
-              updated_at: new Date().toISOString(),
-            }).eq('id', updated.id)
             setEditTicketId(null)
           }}
         />
@@ -3090,25 +2814,38 @@ function PropertiesPanel({ properties, tenants, tickets, onShowAddPropertyModal,
 
 // ─── Documents Panel ──────────────────────────────────────────────────────────
 
-function DocumentsPanel({ onViewTenant, tenants, properties }: { onViewTenant?: (tenantId: string) => void; tenants: Tenant[]; properties: Property[] }) {
-  const { user } = useAuth()
-  const { data: docs, loading: docsLoading, refetch: refetchDocs } = useDocuments()
+interface DocEntry {
+  name: string
+  type: string
+  date: string
+  size: string
+  property?: string
+  unit?: string
+  tenantName?: string
+  tenantPhone?: string
+  tenantId?: string
+}
+
+function DocumentsPanel({ onViewTenant }: { onViewTenant?: (tenantId: string) => void }) {
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [docs, setDocs] = useState<DocEntry[]>([
+    { name: 'Lease Agreement — Sarah Mitchell', type: 'Lease', date: 'Jan 1, 2026', size: '245 KB', property: '14 Oakwood Drive', unit: '1A', tenantName: 'Sarah Mitchell', tenantPhone: '+1 (512) 555-0101', tenantId: 't-1' },
+    { name: 'Lease Agreement — Robert Kim', type: 'Lease', date: 'Dec 1, 2025', size: '238 KB', property: '14 Oakwood Drive', unit: '1B', tenantName: 'Robert Kim', tenantPhone: '+1 (512) 555-0102', tenantId: 't-2' },
+    { name: 'Lease Agreement — Emily Chen', type: 'Lease', date: 'Nov 1, 2025', size: '241 KB', property: '14 Oakwood Drive', unit: '2A', tenantName: 'Emily Chen', tenantPhone: '+1 (512) 555-0103', tenantId: 't-3' },
+    { name: 'Lease Agreement — Priya Sharma', type: 'Lease', date: 'Mar 1, 2026', size: '239 KB', property: '7 Maple Lane', unit: '3A', tenantName: 'Priya Sharma', tenantPhone: '+1 (512) 555-0105', tenantId: 't-5' },
+    { name: 'Move-In Checklist — Sarah Mitchell', type: 'Checklist', date: 'Jan 1, 2026', size: '45 KB', property: '14 Oakwood Drive', unit: '1A', tenantName: 'Sarah Mitchell', tenantPhone: '+1 (512) 555-0101', tenantId: 't-1' },
+    { name: 'Property Insurance — 14 Oakwood Drive', type: 'Insurance', date: 'Mar 15, 2026', size: '1.2 MB', property: '14 Oakwood Drive' },
+    { name: 'Property Insurance — 7 Maple Lane', type: 'Insurance', date: 'Mar 15, 2026', size: '1.1 MB', property: '7 Maple Lane' },
+    { name: 'Inspection Report — Q1 2026', type: 'Report', date: 'Apr 2, 2026', size: '3.4 MB', property: 'All Properties' },
+    { name: 'Inspection Report — Q4 2025', type: 'Report', date: 'Jan 8, 2026', size: '2.9 MB', property: 'All Properties' },
+    { name: 'HOA Rules & Regulations', type: 'Policy', date: 'Jan 1, 2026', size: '189 KB' },
+  ])
+  const [viewingDoc, setViewingDoc] = useState<string | null>(null)
   const [docSearch, setDocSearch] = useState('')
   const [filterProperty, setFilterProperty] = useState('')
   const [filterUnit, setFilterUnit] = useState('')
   const [filterTenant, setFilterTenant] = useState('')
   const [filterType, setFilterType] = useState('')
-  const [viewingDoc, setViewingDoc] = useState<string | null>(null)
-
-  // Upload modal state
-  const [showUploadModal, setShowUploadModal] = useState(false)
-  const [uploadFile, setUploadFile] = useState<File | null>(null)
-  const [uploadName, setUploadName] = useState('')
-  const [uploadType, setUploadType] = useState('Document')
-  const [uploadTenantId, setUploadTenantId] = useState('')
-  const [uploadPropertyId, setUploadPropertyId] = useState('')
-  const [uploading, setUploading] = useState(false)
-  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const uniqueProperties = Array.from(new Set(docs.map(d => d.property).filter(Boolean))) as string[]
   const uniqueUnits = Array.from(new Set(docs.map(d => d.unit).filter(Boolean))) as string[]
@@ -3117,54 +2854,26 @@ function DocumentsPanel({ onViewTenant, tenants, properties }: { onViewTenant?: 
 
   const filteredDocs = docs.filter(d => {
     const q = docSearch.toLowerCase()
-    const matchesSearch = !q || d.name.toLowerCase().includes(q) || (d.tenantName?.toLowerCase().includes(q) ?? false) || (d.tenantPhone?.toLowerCase().includes(q) ?? false)
-    return matchesSearch &&
-      (!filterProperty || d.property === filterProperty) &&
-      (!filterUnit || d.unit === filterUnit) &&
-      (!filterTenant || d.tenantName === filterTenant) &&
-      (!filterType || d.type === filterType)
+    const matchesSearch = !q || d.name.toLowerCase().includes(q) ||
+      (d.tenantName?.toLowerCase().includes(q) ?? false) ||
+      (d.tenantPhone?.toLowerCase().includes(q) ?? false)
+    const matchesProp = !filterProperty || d.property === filterProperty
+    const matchesUnit = !filterUnit || d.unit === filterUnit
+    const matchesTenant = !filterTenant || d.tenantName === filterTenant
+    const matchesType = !filterType || d.type === filterType
+    return matchesSearch && matchesProp && matchesUnit && matchesTenant && matchesType
   })
 
-  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
-    if (!file) return
-    setUploadFile(file)
-    setUploadName(file.name.replace(/\.[^.]+$/, ''))
-    setShowUploadModal(true)
-    e.target.value = ''
-  }
-
-  async function handleUpload() {
-    if (!uploadFile || !user) return
-    setUploading(true)
-    const safeName = uploadFile.name.replace(/[^a-zA-Z0-9._-]/g, '_')
-    const path = `${user.id}/${Date.now()}_${safeName}`
-    const { error: upErr } = await supabase.storage.from('documents').upload(path, uploadFile)
-    if (upErr) { showToast({ type: 'error', title: 'Upload failed: ' + upErr.message }); setUploading(false); return }
-    const { error: dbErr } = await supabase.from('documents').insert({
-      name: uploadName || uploadFile.name,
-      type: uploadType,
-      storage_path: path,
-      size_bytes: uploadFile.size,
-      property_id: uploadPropertyId || null,
-      tenant_id: uploadTenantId || null,
-      uploaded_by: user.id,
-    })
-    if (dbErr) showToast({ type: 'error', title: 'Failed to save record: ' + dbErr.message })
-    else {
-      showToast({ type: 'success', title: `"${uploadName || uploadFile.name}" uploaded` })
-      setShowUploadModal(false)
-      setUploadFile(null); setUploadName(''); setUploadType('Document')
-      setUploadTenantId(''); setUploadPropertyId('')
-      refetchDocs()
+    if (file) {
+      const today = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+      const sizeKB = Math.round(file.size / 1024)
+      const sizeStr = sizeKB > 1024 ? `${(sizeKB / 1024).toFixed(1)} MB` : `${sizeKB} KB`
+      setDocs((prev) => [{ name: file.name, type: 'Document', date: today, size: sizeStr }, ...prev])
+      showToast({ type: 'success', title: `"${file.name}" uploaded` })
     }
-    setUploading(false)
-  }
-
-  async function handleDownload(doc: (typeof docs)[0]) {
-    if (!doc.storagePath) { showToast({ type: 'info', title: 'No file attached to this record' }); return }
-    const { data } = await supabase.storage.from('documents').createSignedUrl(doc.storagePath, 60)
-    if (data?.signedUrl) window.open(data.signedUrl, '_blank')
+    e.target.value = ''
   }
 
   const hasFilters = filterProperty || filterUnit || filterTenant || filterType
@@ -3176,19 +2885,25 @@ function DocumentsPanel({ onViewTenant, tenants, properties }: { onViewTenant?: 
           <h2 className="text-lg font-bold text-gray-900">Documents</h2>
           <p className="text-xs text-gray-500">{filteredDocs.length} of {docs.length} document{docs.length !== 1 ? 's' : ''}</p>
         </div>
-        <button onClick={() => fileInputRef.current?.click()}
-          className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2 rounded-xl flex items-center gap-2 transition-colors">
-          <Plus className="w-4 h-4" /> Upload Document
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2 rounded-xl flex items-center gap-2 transition-colors"
+        >
+          <Plus className="w-4 h-4" /> Upload
         </button>
-        <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileSelect} />
+        <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileChange} />
       </div>
 
       {/* Search + Filters */}
       <div className="flex items-center gap-3 flex-wrap">
         <div className="relative flex-1 min-w-[200px]">
           <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input className="pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 w-full"
-            placeholder="Search name, tenant, phone…" value={docSearch} onChange={e => setDocSearch(e.target.value)} />
+          <input
+            className="pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 w-full"
+            placeholder="Search name, tenant, phone…"
+            value={docSearch}
+            onChange={e => setDocSearch(e.target.value)}
+          />
         </div>
         <select value={filterType} onChange={e => setFilterType(e.target.value)}
           className="px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
@@ -3219,124 +2934,67 @@ function DocumentsPanel({ onViewTenant, tenants, properties }: { onViewTenant?: 
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-        {docsLoading ? (
-          <div className="flex items-center justify-center py-12 text-gray-400 gap-2 text-sm">
-            <span className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" /> Loading…
-          </div>
-        ) : (
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-gray-100">
-                {['Name', 'Tenant', 'Type', 'Date', 'Size', ''].map(h => (
-                  <th key={h} className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {filteredDocs.map(d => (
-                <tr key={d.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
-                  <td className="px-5 py-3">
-                    <div className="flex items-center gap-2">
-                      <FileText className="w-4 h-4 text-gray-400 shrink-0" />
-                      <div>
-                        <span className="text-sm font-medium text-gray-900">{d.name}</span>
-                        {d.property && <p className="text-xs text-gray-400">{d.property}{d.unit ? ` · Unit ${d.unit}` : ''}</p>}
-                      </div>
+        <table className="w-full">
+          <thead>
+            <tr className="border-b border-gray-100">
+              <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Name</th>
+              <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Tenant</th>
+              <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Type</th>
+              <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Date</th>
+              <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Size</th>
+              <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredDocs.map((d, i) => (
+              <tr key={i} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
+                <td className="px-5 py-3">
+                  <div className="flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-gray-400 shrink-0" />
+                    <div>
+                      <span className="text-sm font-medium text-gray-900">{d.name}</span>
+                      {d.property && <p className="text-xs text-gray-400">{d.property}{d.unit ? ` · Unit ${d.unit}` : ''}</p>}
                     </div>
-                  </td>
-                  <td className="px-5 py-3">
-                    {d.tenantName ? (
-                      <div>
-                        {d.tenantId && onViewTenant
-                          ? <button onClick={() => onViewTenant(d.tenantId!)} className="text-sm font-medium text-blue-600 hover:underline text-left">{d.tenantName}</button>
-                          : <p className="text-sm text-gray-700">{d.tenantName}</p>}
-                        {d.tenantPhone && <p className="text-xs text-gray-400">{d.tenantPhone}</p>}
-                      </div>
-                    ) : <span className="text-xs text-gray-400">—</span>}
-                  </td>
-                  <td className="px-5 py-3">
-                    <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-gray-100 text-gray-600">{d.type}</span>
-                  </td>
-                  <td className="px-5 py-3 text-sm text-gray-500">{d.date}</td>
-                  <td className="px-5 py-3 text-sm text-gray-500">{d.size}</td>
-                  <td className="px-5 py-3">
-                    <button onClick={() => handleDownload(d)} className="text-xs font-semibold text-blue-600 hover:text-blue-700">
-                      {d.storagePath ? 'Download' : 'View'}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-        {!docsLoading && filteredDocs.length === 0 && (
-          <div className="text-center py-10 text-gray-400 text-sm">
-            {docs.length === 0 ? 'No documents yet. Upload one to get started.' : 'No documents match your filters.'}
-          </div>
+                  </div>
+                </td>
+                <td className="px-5 py-3">
+                  {d.tenantName ? (
+                    <div>
+                      {d.tenantId && onViewTenant ? (
+                        <button
+                          onClick={() => onViewTenant(d.tenantId!)}
+                          className="text-sm font-medium text-blue-600 hover:text-blue-700 hover:underline text-left"
+                        >
+                          {d.tenantName}
+                        </button>
+                      ) : (
+                        <p className="text-sm text-gray-700">{d.tenantName}</p>
+                      )}
+                      <p className="text-xs text-gray-400">{d.tenantPhone}</p>
+                    </div>
+                  ) : <span className="text-xs text-gray-400">—</span>}
+                </td>
+                <td className="px-5 py-3">
+                  <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-gray-100 text-gray-600">{d.type}</span>
+                </td>
+                <td className="px-5 py-3 text-sm text-gray-500">{d.date}</td>
+                <td className="px-5 py-3 text-sm text-gray-500">{d.size}</td>
+                <td className="px-5 py-3">
+                  <button
+                    onClick={() => setViewingDoc(d.name)}
+                    className="text-xs font-semibold text-blue-600 hover:text-blue-700"
+                  >
+                    View
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {filteredDocs.length === 0 && (
+          <div className="text-center py-10 text-gray-400 text-sm">No documents match your filters.</div>
         )}
       </div>
-
-      {/* Upload Modal */}
-      {showUploadModal && (
-        <ModalBackdrop onClose={() => { setShowUploadModal(false); setUploadFile(null) }}>
-          <div className="bg-white rounded-xl border border-gray-200 shadow-lg w-full max-w-md animate-scale-in">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-              <h2 className="text-base font-bold text-gray-900">Upload Document</h2>
-              <button onClick={() => { setShowUploadModal(false); setUploadFile(null) }} className="w-8 h-8 rounded-lg bg-gray-100 hover:bg-gray-200 flex items-center justify-center">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="p-6 space-y-4">
-              <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 flex items-center gap-3">
-                <FileText className="w-5 h-5 text-blue-500 shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900 truncate">{uploadFile?.name}</p>
-                  <p className="text-xs text-gray-500">{uploadFile ? `${Math.round(uploadFile.size / 1024)} KB` : ''}</p>
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">Document Name</label>
-                <input value={uploadName} onChange={e => setUploadName(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">Type</label>
-                <select value={uploadType} onChange={e => setUploadType(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
-                  {['Lease', 'Checklist', 'Insurance', 'Report', 'Policy', 'Invoice', 'Document'].map(t => <option key={t}>{t}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">Associate with Property (optional)</label>
-                <select value={uploadPropertyId} onChange={e => { setUploadPropertyId(e.target.value); setUploadTenantId('') }}
-                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
-                  <option value="">No property</option>
-                  {properties.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">Associate with Tenant (optional)</label>
-                <select value={uploadTenantId} onChange={e => setUploadTenantId(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
-                  <option value="">No tenant</option>
-                  {(uploadPropertyId ? tenants.filter(t => properties.find(p => p.id === uploadPropertyId)?.name === t.property) : tenants)
-                    .map(t => <option key={t.id} value={t.id}>{t.name} · {t.unit}</option>)}
-                </select>
-              </div>
-              <div className="flex gap-3 pt-2">
-                <button onClick={() => { setShowUploadModal(false); setUploadFile(null) }}
-                  className="flex-1 border border-gray-200 text-gray-700 text-sm font-semibold py-2.5 rounded-xl hover:bg-gray-50 transition-colors">Cancel</button>
-                <button onClick={handleUpload} disabled={uploading || !uploadName.trim()}
-                  className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-sm font-semibold py-2.5 rounded-xl transition-colors flex items-center justify-center gap-2">
-                  {uploading && <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
-                  {uploading ? 'Uploading…' : 'Upload'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </ModalBackdrop>
-      )}
-
       {viewingDoc && <DocViewerModal filename={viewingDoc} onClose={() => setViewingDoc(null)} />}
     </div>
   )
@@ -3891,15 +3549,12 @@ interface AnalyticsPanelProps {
   initialSection?: string
   rentRecords?: RentRecord[]
   tenants?: Tenant[]
-  properties?: Property[]
-  tickets?: MaintenanceTicket[]
 }
 
-function AnalyticsPanel({ initialSection = 'overview', rentRecords = [], tenants = [], properties = [], tickets = [], activityFeed = [] }: AnalyticsPanelProps & { activityFeed?: { id: string; type: string; text: string; time: string }[] }) {
+function AnalyticsPanel({ initialSection = 'overview', rentRecords = [], tenants = [] }: AnalyticsPanelProps) {
   const [subSection, setSubSection] = useState<'overview' | 'occupancy' | 'revenue' | 'maintenance' | 'rentroll' | 'cashflow'>(
     (initialSection as 'overview' | 'occupancy' | 'revenue' | 'maintenance' | 'rentroll' | 'cashflow') || 'overview'
   )
-  const [selectedPropId, setSelectedPropId] = useState<string>('all')
 
   const tabs = [
     { id: 'overview', label: 'Overview' },
@@ -3910,107 +3565,39 @@ function AnalyticsPanel({ initialSection = 'overview', rentRecords = [], tenants
     { id: 'maintenance', label: 'Maintenance' },
   ] as const
 
-  // ─── Property filter ──────────────────────────────────────────────────────
-  const selectedPropName = selectedPropId === 'all' ? null : properties.find(p => p.id === selectedPropId)?.name
-  const fp = selectedPropId === 'all' ? properties : properties.filter(p => p.id === selectedPropId)
-  const ft = selectedPropId === 'all' ? tenants : tenants.filter(t => t.property === selectedPropName)
-  const fk = selectedPropId === 'all' ? tickets : tickets.filter(t => t.property === selectedPropName)
-  const fr = selectedPropId === 'all' ? rentRecords : rentRecords.filter(r => ft.some(t => t.id === r.tenantId))
+  const totalRevenue = revenueData.reduce((s, d) => s + d.revenue, 0)
+  const totalExpenses = revenueData.reduce((s, d) => s + d.expenses, 0)
+  const noi = totalRevenue - totalExpenses
+  const ytdRevenue = revenueData.reduce((s, d) => s + d.revenue, 0)
 
-  // ─── Computed from real data ──────────────────────────────────────────────
-  const totalUnits = fp.reduce((s, p) => s + p.units, 0)
-  const totalOccupied = fp.reduce((s, p) => s + p.occupied, 0)
-  const totalMonthlyRevenue = fp.reduce((s, p) => s + p.monthlyIncome, 0)
-  const occupancyPct = totalUnits > 0 ? ((totalOccupied / totalUnits) * 100).toFixed(1) : '0'
+  const occupancyByProperty = [
+    { property: '14 Oakwood Drive', units: 4, occupied: 4, pct: 100 },
+    { property: '7 Maple Lane', units: 4, occupied: 4, pct: 100 },
+    { property: '12 Elmwood Court', units: 4, occupied: 3, pct: 75 },
+  ]
 
-  const occupancyByProperty = fp.map(p => ({
-    property: p.name,
-    units: p.units,
-    occupied: p.occupied,
-    pct: p.units > 0 ? Math.round((p.occupied / p.units) * 100) : 0,
-  }))
+  const highestUnits = [
+    { unit: 'Unit 4B', count: 3 },
+    { unit: 'Unit 2A', count: 2 },
+    { unit: 'Unit 3A', count: 2 },
+    { unit: 'Unit 1B', count: 1 },
+    { unit: '1 Elmwood', count: 1 },
+  ]
 
-  // Revenue by month from rent records
-  const revenueByMonth: Record<string, number> = {}
-  fr.filter(r => r.status !== 'pending').forEach(r => {
-    const short = r.month.replace(/\s+\d{4}$/, '').slice(0, 3)
-    revenueByMonth[short] = (revenueByMonth[short] ?? 0) + r.amount
-  })
-  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-  const computedRevenueData = MONTHS.filter(m => revenueByMonth[m] !== undefined).map(m => ({
-    month: m, revenue: revenueByMonth[m], expenses: Math.round(revenueByMonth[m] * 0.15),
-  }))
-  const chartRevenueData = computedRevenueData.length > 0 ? computedRevenueData : (properties.length > 0 ? [] : revenueData)
-
-  const ytdRevenue = chartRevenueData.reduce((s, d) => s + d.revenue, 0)
-  const totalExpenses = chartRevenueData.reduce((s, d) => s + d.expenses, 0)
-  const noi = ytdRevenue - totalExpenses
-
-  // Occupancy trend: use current rate for months with rent data; bar chart of per-property when no history
-  const currentRate = totalUnits > 0 ? parseFloat(occupancyPct) : 0
-  const computedOccupancyData = MONTHS
-    .filter(m => revenueByMonth[m] !== undefined)
-    .map(m => ({ month: m, rate: currentRate }))
-  const chartOccupancyData = computedOccupancyData.length > 0 ? computedOccupancyData
-    : fp.length > 0 ? [{ month: new Date().toLocaleString('en-US', { month: 'short' }), rate: currentRate }]
-    : occupancyData
-
-  // Tickets by category from real data
-  const ticketCategoryMap: Record<string, number> = {}
-  fk.forEach(t => { ticketCategoryMap[t.category] = (ticketCategoryMap[t.category] ?? 0) + 1 })
-  const TICKET_COLORS = ['#2563EB', '#7C3AED', '#EA580C', '#16A34A', '#6B7280']
-  const computedTicketsByType = Object.entries(ticketCategoryMap).map(([name, value], i) => ({ name, value, fill: TICKET_COLORS[i % TICKET_COLORS.length] }))
-  const resolvedTicketsByType = computedTicketsByType.length > 0 ? computedTicketsByType : (tickets.length > 0 ? [] : ticketsByType)
-
-  // Tickets by month from real data
-  const ticketMonthMap: Record<string, number> = {}
-  fk.forEach(t => {
-    const short = t.createdAt.slice(0, 3)
-    ticketMonthMap[short] = (ticketMonthMap[short] ?? 0) + 1
-  })
-  const computedTicketsByMonth = MONTHS.filter(m => ticketMonthMap[m] !== undefined).map(m => ({ month: m, count: ticketMonthMap[m] }))
-  const resolvedTicketsByMonth = computedTicketsByMonth.length > 0 ? computedTicketsByMonth : (tickets.length > 0 ? [] : ticketsByMonth)
-
-  // Highest maintenance units from real data
-  const unitTicketMap: Record<string, number> = {}
-  fk.forEach(t => { if (t.unit) unitTicketMap[t.unit] = (unitTicketMap[t.unit] ?? 0) + 1 })
-  const computedHighestUnits = Object.entries(unitTicketMap).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([unit, count]) => ({ unit, count }))
-  const highestUnits = computedHighestUnits.length > 0 ? computedHighestUnits : (tickets.length > 0 ? [] : [
-    { unit: 'Unit 4B', count: 3 }, { unit: 'Unit 2A', count: 2 }, { unit: 'Unit 3A', count: 2 },
-  ])
-
-  // Maintenance stats from real data
-  const totalTickets = fk.length
-  const openTickets = fk.filter(t => t.status === 'open' || t.status === 'in_progress').length
-  const resolvedTickets = fk.filter(t => t.status === 'resolved')
-  const avgResolutionDays = resolvedTickets.length > 0
-    ? (resolvedTickets.reduce((s, t) => {
-        const ms = new Date(t.updatedAt).getTime() - new Date(t.createdAt).getTime()
-        return s + ms / (1000 * 60 * 60 * 24)
-      }, 0) / resolvedTickets.length).toFixed(1)
-    : null
-  const costThisMonth = fk.filter(t => {
-    const d = new Date(t.createdAt)
-    const now = new Date()
-    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()
-  }).reduce((s, t) => s + (t.cost ?? 0), 0)
-
-  const currentMonth = new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' })
-  const rentRollData = ft.map(t => {
-    const pmt = fr.find(r => r.tenantId === t.id && r.month === currentMonth)
-    return { ...t, junePaid: !!pmt, juneStatus: pmt?.status ?? 'unpaid', datePaid: pmt?.datePaid ?? null, method: pmt?.method ?? null }
+  const currentMonth = 'June 2026'
+  const rentRollData = tenants.map(t => {
+    const junePmt = rentRecords.find(r => r.tenantId === t.id && r.month === currentMonth)
+    return { ...t, junePaid: !!junePmt, juneStatus: junePmt?.status ?? 'unpaid', datePaid: junePmt?.datePaid ?? null, method: junePmt?.method ?? null }
   })
 
-  const cashFlowData = chartRevenueData.map(d => ({
-    month: d.month,
-    income: d.revenue,
-    mortgage: Math.round(d.revenue * 0.45),
-    maintenance: Math.round(d.expenses * 0.7),
-    insurance: Math.round(d.revenue * 0.03),
-    tax: Math.round(d.revenue * 0.02),
-    mgmt: Math.round(d.revenue * 0.01),
-    net: d.revenue - Math.round(d.revenue * 0.45) - d.expenses,
-  }))
+  const cashFlowData = [
+    { month: 'Jan', income: 14000, mortgage: 6500, maintenance: 1100, insurance: 420, tax: 290, mgmt: 140, net: 5550 },
+    { month: 'Feb', income: 14000, mortgage: 6500, maintenance: 980, insurance: 420, tax: 290, mgmt: 140, net: 5670 },
+    { month: 'Mar', income: 14000, mortgage: 6500, maintenance: 1350, insurance: 420, tax: 290, mgmt: 140, net: 5300 },
+    { month: 'Apr', income: 14000, mortgage: 6500, maintenance: 890, insurance: 420, tax: 290, mgmt: 140, net: 5760 },
+    { month: 'May', income: 14000, mortgage: 6500, maintenance: 1150, insurance: 420, tax: 290, mgmt: 140, net: 5500 },
+    { month: 'Jun', income: 14400, mortgage: 6500, maintenance: 425, insurance: 420, tax: 290, mgmt: 144, net: 6621 },
+  ]
 
   return (
     <div className="p-6 space-y-5 animate-slide-up">
@@ -4019,26 +3606,14 @@ function AnalyticsPanel({ initialSection = 'overview', rentRecords = [], tenants
         <p className="text-xs text-gray-500">Portfolio performance overview</p>
       </div>
 
-      {/* Sub-nav tabs + property selector */}
-      <div className="flex items-center gap-4 flex-wrap">
-        <div className="flex gap-1 bg-gray-100 p-1 rounded-xl">
-          {tabs.map(t => (
-            <button key={t.id} onClick={() => setSubSection(t.id)}
-              className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${subSection === t.id ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}>
-              {t.label}
-            </button>
-          ))}
-        </div>
-        {properties.length > 1 && (
-          <select
-            value={selectedPropId}
-            onChange={e => setSelectedPropId(e.target.value)}
-            className="px-3 py-1.5 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="all">All Properties</option>
-            {properties.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
-        )}
+      {/* Sub-nav tabs */}
+      <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
+        {tabs.map(t => (
+          <button key={t.id} onClick={() => setSubSection(t.id)}
+            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${subSection === t.id ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}>
+            {t.label}
+          </button>
+        ))}
       </div>
 
       {/* Overview */}
@@ -4046,10 +3621,10 @@ function AnalyticsPanel({ initialSection = 'overview', rentRecords = [], tenants
         <div className="space-y-5">
           <div className="grid grid-cols-4 gap-4">
             {[
-              { label: 'Total Units', value: String(totalUnits || '—'), color: 'text-blue-600 bg-blue-50', icon: <Home className="w-5 h-5" /> },
-              { label: 'Occupied', value: totalUnits ? `${totalOccupied}/${totalUnits}` : '—', color: 'text-green-600 bg-green-50', icon: <Users className="w-5 h-5" /> },
-              { label: 'Occupancy Rate', value: totalUnits ? `${occupancyPct}%` : '—', color: 'text-purple-600 bg-purple-50', icon: <TrendingUp className="w-5 h-5" /> },
-              { label: 'Monthly Revenue', value: totalMonthlyRevenue ? `$${totalMonthlyRevenue.toLocaleString()}` : '—', color: 'text-emerald-600 bg-emerald-50', icon: <DollarSign className="w-5 h-5" /> },
+              { label: 'Total Units', value: '12', color: 'text-blue-600 bg-blue-50', icon: <Home className="w-5 h-5" /> },
+              { label: 'Occupied', value: '11/12', color: 'text-green-600 bg-green-50', icon: <Users className="w-5 h-5" /> },
+              { label: 'Avg Occupancy', value: '91.7%', color: 'text-purple-600 bg-purple-50', icon: <TrendingUp className="w-5 h-5" /> },
+              { label: 'Monthly Revenue', value: '$14,400', color: 'text-emerald-600 bg-emerald-50', icon: <DollarSign className="w-5 h-5" /> },
             ].map(k => (
               <div key={k.label} className="bg-white rounded-xl border border-gray-200 p-4">
                 <div className="flex items-center justify-between mb-3">
@@ -4064,7 +3639,7 @@ function AnalyticsPanel({ initialSection = 'overview', rentRecords = [], tenants
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
               <h3 className="text-sm font-semibold text-gray-900 mb-4">Occupancy Trend (6 months)</h3>
               <ResponsiveContainer width="100%" height={180}>
-                <AreaChart data={chartOccupancyData}>
+                <AreaChart data={occupancyData}>
                   <defs>
                     <linearGradient id="occGrad2" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#2563EB" stopOpacity={0.15} />
@@ -4110,9 +3685,9 @@ function AnalyticsPanel({ initialSection = 'overview', rentRecords = [], tenants
         <div className="space-y-5">
           <div className="grid grid-cols-3 gap-4">
             {[
-              { label: 'Overall Occupancy', value: totalUnits ? `${occupancyPct}%` : '—', sub: `${totalOccupied} of ${totalUnits} units` },
-              { label: 'Vacant Units', value: String(totalUnits - totalOccupied), sub: `${properties.length} propert${properties.length !== 1 ? 'ies' : 'y'}` },
-              { label: 'Total Monthly Revenue', value: totalMonthlyRevenue ? `$${totalMonthlyRevenue.toLocaleString()}` : '—', sub: 'across all properties' },
+              { label: 'Overall Occupancy', value: '91.7%', sub: '11 of 12 units' },
+              { label: 'Vacant Units', value: '1', sub: '12 Elmwood Court' },
+              { label: 'Avg Occupancy (6mo)', value: '90.3%', sub: 'Jan–Jun 2026' },
             ].map(k => (
               <div key={k.label} className="bg-white rounded-xl border border-gray-200 p-4">
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">{k.label}</p>
@@ -4124,7 +3699,7 @@ function AnalyticsPanel({ initialSection = 'overview', rentRecords = [], tenants
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
             <h3 className="text-sm font-semibold text-gray-900 mb-4">Occupancy Trend (6 months)</h3>
             <ResponsiveContainer width="100%" height={200}>
-              <AreaChart data={chartOccupancyData}>
+              <AreaChart data={occupancyData}>
                 <defs>
                   <linearGradient id="occGrad3" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#2563EB" stopOpacity={0.15} />
@@ -4179,7 +3754,7 @@ function AnalyticsPanel({ initialSection = 'overview', rentRecords = [], tenants
               { label: 'YTD Revenue', value: `$${ytdRevenue.toLocaleString()}`, color: 'text-blue-600' },
               { label: 'Total Expenses', value: `$${totalExpenses.toLocaleString()}`, color: 'text-red-500' },
               { label: 'Net Operating Income', value: `$${noi.toLocaleString()}`, color: 'text-green-600' },
-              { label: 'NOI Margin', value: `${ytdRevenue > 0 ? Math.round((noi / ytdRevenue) * 100) : 0}%`, color: 'text-emerald-600' },
+              { label: 'NOI Margin', value: `${Math.round((noi / totalRevenue) * 100)}%`, color: 'text-emerald-600' },
             ].map(c => (
               <div key={c.label} className="bg-white rounded-xl border border-gray-200 p-4">
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">{c.label}</p>
@@ -4190,7 +3765,7 @@ function AnalyticsPanel({ initialSection = 'overview', rentRecords = [], tenants
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
             <h3 className="text-sm font-semibold text-gray-900 mb-4">Monthly Revenue vs Expenses</h3>
             <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={chartRevenueData} barGap={4}>
+              <BarChart data={revenueData} barGap={4}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
                 <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
@@ -4213,17 +3788,19 @@ function AnalyticsPanel({ initialSection = 'overview', rentRecords = [], tenants
                 </tr>
               </thead>
               <tbody>
-                {fp.length > 0 ? fp.map(p => (
-                  <tr key={p.id} className="border-b border-gray-50 hover:bg-gray-50">
+                {[
+                  { name: '14 Oakwood Drive', units: 4, occupied: 4, income: 5800 },
+                  { name: '7 Maple Lane', units: 4, occupied: 4, income: 5900 },
+                  { name: '12 Elmwood Court', units: 4, occupied: 3, income: 4200 },
+                ].map(p => (
+                  <tr key={p.name} className="border-b border-gray-50 hover:bg-gray-50">
                     <td className="px-5 py-3 text-sm font-medium text-gray-900">{p.name}</td>
                     <td className="px-5 py-3 text-sm text-gray-700">{p.units}</td>
                     <td className="px-5 py-3 text-sm text-gray-700">{p.occupied}</td>
-                    <td className="px-5 py-3 text-sm font-semibold text-green-600">${p.monthlyIncome.toLocaleString()}</td>
-                    <td className="px-5 py-3 text-sm text-gray-600">{p.occupied > 0 ? `$${Math.round(p.monthlyIncome / p.occupied).toLocaleString()}` : '—'}</td>
+                    <td className="px-5 py-3 text-sm font-semibold text-green-600">${p.income.toLocaleString()}</td>
+                    <td className="px-5 py-3 text-sm text-gray-600">${Math.round(p.income / p.occupied).toLocaleString()}</td>
                   </tr>
-                )) : (
-                  <tr><td colSpan={5} className="px-5 py-6 text-sm text-center text-gray-400">No properties yet.</td></tr>
-                )}
+                ))}
               </tbody>
             </table>
           </div>
@@ -4235,10 +3812,10 @@ function AnalyticsPanel({ initialSection = 'overview', rentRecords = [], tenants
         <div className="space-y-5">
           <div className="grid grid-cols-4 gap-4">
             {[
-              { label: 'Total (All Time)', value: String(totalTickets || 0), color: 'text-blue-600 bg-blue-50', icon: <BarChart2 className="w-4 h-4" /> },
-              { label: 'Open / In Progress', value: String(openTickets), color: 'text-amber-600 bg-amber-50', icon: <Wrench className="w-4 h-4" /> },
-              { label: 'Avg Resolution', value: avgResolutionDays ? `${avgResolutionDays}d` : '—', color: 'text-green-600 bg-green-50', icon: <TrendingUp className="w-4 h-4" /> },
-              { label: 'Cost This Month', value: costThisMonth > 0 ? `$${costThisMonth.toLocaleString()}` : '—', color: 'text-purple-600 bg-purple-50', icon: <DollarSign className="w-4 h-4" /> },
+              { label: 'Total (All Time)', value: '9', color: 'text-blue-600 bg-blue-50', icon: <BarChart2 className="w-4 h-4" /> },
+              { label: 'Open', value: '2', color: 'text-amber-600 bg-amber-50', icon: <Wrench className="w-4 h-4" /> },
+              { label: 'Avg Resolution', value: '3.2d', color: 'text-green-600 bg-green-50', icon: <TrendingUp className="w-4 h-4" /> },
+              { label: 'Cost This Month', value: '$340', color: 'text-purple-600 bg-purple-50', icon: <DollarSign className="w-4 h-4" /> },
             ].map(k => (
               <div key={k.label} className="bg-white rounded-xl border border-gray-200 p-4 flex items-center gap-3">
                 <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${k.color}`}>{k.icon}</div>
@@ -4253,7 +3830,7 @@ function AnalyticsPanel({ initialSection = 'overview', rentRecords = [], tenants
             <div className="bg-white rounded-xl border border-gray-200 p-5">
               <h4 className="text-sm font-semibold text-gray-900 mb-3">Tickets by Month</h4>
               <ResponsiveContainer width="100%" height={160}>
-                <BarChart data={resolvedTicketsByMonth}>
+                <BarChart data={ticketsByMonth}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
                   <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
                   <YAxis tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
@@ -4266,8 +3843,8 @@ function AnalyticsPanel({ initialSection = 'overview', rentRecords = [], tenants
               <h4 className="text-sm font-semibold text-gray-900 mb-3">By Issue Type</h4>
               <ResponsiveContainer width="100%" height={160}>
                 <PieChart>
-                  <Pie data={resolvedTicketsByType} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={60}>
-                    {resolvedTicketsByType.map((entry, i) => <Cell key={i} fill={entry.fill} />)}
+                  <Pie data={ticketsByType} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={60}>
+                    {ticketsByType.map((entry, i) => <Cell key={i} fill={entry.fill} />)}
                   </Pie>
                   <Legend iconSize={10} wrapperStyle={{ fontSize: 11 }} />
                   <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #E5E7EB', fontSize: 12 }} />
@@ -4533,56 +4110,26 @@ export default function AdminPortal() {
   const [analyticsSection, setAnalyticsSection] = useState('overview')
   const [showBugModal, setShowBugModal] = useState(false)
 
-  // Auth
-  const { user, signOut } = useAuth()
-  const { demoMode, setDemoMode } = useDemoMode()
-
-  // Supabase data hooks
-  const { data: tenantsData } = useTenants()
-  const { data: propertiesData } = useProperties()
-  const { data: ticketsData } = useMaintenanceTickets()
-  const { data: rentRecordsData, refetch: refetchRentRecords } = useRentRecords()
-  const { data: threadsData } = useThreads()
-
   // Shared state lifted to root
-  const [tenants, setTenants] = useState<Tenant[]>([])
-  const [tickets, setTickets] = useState<MaintenanceTicket[]>([])
-  const [propertiesList, setPropertiesList] = useState<Property[]>([])
-  const [threads, setThreads] = useState<Thread[]>([])
+  const [tenants, setTenants] = useState<Tenant[]>(initialTenants)
+  const [tickets, setTickets] = useState<MaintenanceTicket[]>(initialTickets)
+  const [propertiesList, setPropertiesList] = useState<Property[]>(initialProperties)
+  const [threads, setThreads] = useState<Thread[]>(messageThreads)
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null)
 
-  useEffect(() => { if (tenantsData.length) setTenants(tenantsData) }, [tenantsData])
-  useEffect(() => { if (propertiesData.length) setPropertiesList(propertiesData) }, [propertiesData])
-  useEffect(() => { if (ticketsData.length) setTickets(ticketsData) }, [ticketsData])
-  useEffect(() => { if (threadsData.length) setThreads(threadsData) }, [threadsData])
-
-  // Profile state (from auth)
-  const [profileName, setProfileName] = useState('')
+  // Profile state
+  const [profileName, setProfileName] = useState('BMP Central Admin')
   const [profilePhoto, setProfilePhoto] = useState<string | null>(null)
-  useEffect(() => {
-    if (user) {
-      setProfileName(user.user_metadata?.full_name || user.email || 'Admin')
-      setProfilePhoto(user.user_metadata?.avatar_url || null)
-    }
-  }, [user])
 
   // Notification bell state
   const [showNotifs, setShowNotifs] = useState(false)
-  const STATIC_NOTIFS = [
-    { id: 'n1', type: 'maintenance', icon: 'wrench', title: 'New maintenance request', body: 'Sarah Mitchell submitted a plumbing request — Unit 4B', time: '2 min ago' },
-    { id: 'n2', type: 'payment', icon: 'dollar', title: 'Rent received', body: 'Rachel Green paid $1,250 — Unit 4A', time: '1 hour ago' },
-    { id: 'n3', type: 'lease', icon: 'file', title: 'Lease expiring soon', body: 'Jessica Park, Unit 2A — expires Aug 31, 2026', time: '3 hours ago' },
-    { id: 'n4', type: 'maintenance', icon: 'check', title: 'Ticket resolved', body: 'Ticket #1031 resolved — Maria Santos, Unit 3A', time: '1 day ago' },
-    { id: 'n5', type: 'move', icon: 'user', title: 'Portal login', body: 'Sarah Mitchell logged into tenant portal', time: '2 days ago' },
-  ]
-  const [notifications, setNotifications] = useState(() => {
-    try {
-      const readIds: string[] = JSON.parse(localStorage.getItem('bmp_readNotifs') ?? '[]')
-      return STATIC_NOTIFS.map(n => ({ ...n, read: readIds.includes(n.id) }))
-    } catch {
-      return STATIC_NOTIFS.map(n => ({ ...n, read: false }))
-    }
-  })
+  const [notifications, setNotifications] = useState([
+    { id: 'n1', type: 'maintenance', icon: 'wrench', title: 'New maintenance request', body: 'Sarah Mitchell submitted a plumbing request — Unit 4B', time: '2 min ago', read: false },
+    { id: 'n2', type: 'payment', icon: 'dollar', title: 'Rent received', body: 'Rachel Green paid $1,250 — Unit 4A, 44 Riverside Dr', time: '1 hour ago', read: false },
+    { id: 'n3', type: 'lease', icon: 'file', title: 'Lease expiring soon', body: 'Jessica Park, Unit 2A — expires Aug 31, 2026 (82 days)', time: '3 hours ago', read: true },
+    { id: 'n4', type: 'maintenance', icon: 'check', title: 'Ticket resolved', body: 'Ticket #1031 resolved — Maria Santos, Unit 3A', time: '1 day ago', read: true },
+    { id: 'n5', type: 'move', icon: 'user', title: 'Portal login', body: 'Sarah Mitchell logged into tenant portal', time: '2 days ago', read: true },
+  ])
 
   // Profile dropdown state
   const [showProfileMenu, setShowProfileMenu] = useState(false)
@@ -4605,34 +4152,16 @@ export default function AdminPortal() {
   const [viewTenantId, setViewTenantId] = useState<string | null>(null)
 
   // Rent records + payment logging
-  const [rentRecords, setRentRecords] = useState<RentRecord[]>([])
+  const [rentRecords, setRentRecords] = useState<RentRecord[]>(initialRentRecords)
   const [logPaymentTenantId, setLogPaymentTenantId] = useState<string | null>(null)
-  useEffect(() => { if (rentRecordsData.length) setRentRecords(rentRecordsData) }, [rentRecordsData])
 
   // Reactive activity feed
   type ActivityEntry = { id: string; type: 'payment' | 'ticket' | 'tenant' | 'announcement' | 'lease'; text: string; time: string }
-  const [recentActivity, setRecentActivity] = useState<ActivityEntry[]>([])
-  useEffect(() => {
-    if (demoMode) {
-      setRecentActivity(mockActivityFeed.map(a => ({ id: a.id, type: a.type as ActivityEntry['type'], text: a.text, time: a.time })))
-      return
-    }
-    supabase.from('activity_log')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(20)
-      .then(({ data }) => {
-        if (data) setRecentActivity(data.map((a) => ({
-          id: a.id,
-          type: a.type as ActivityEntry['type'],
-          text: a.text,
-          time: new Date(a.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-        })))
-      })
-  }, [demoMode])
-  async function addActivity(entry: Omit<ActivityEntry, 'id' | 'time'>) {
+  const [recentActivity, setRecentActivity] = useState<ActivityEntry[]>(
+    activityFeed.map(a => ({ id: a.id, type: a.type as ActivityEntry['type'], text: a.text, time: a.time }))
+  )
+  function addActivity(entry: Omit<ActivityEntry, 'id' | 'time'>) {
     setRecentActivity(prev => [{ ...entry, id: `act-${Date.now()}`, time: 'Just now' }, ...prev].slice(0, 20))
-    await supabase.from('activity_log').insert({ type: entry.type, text: entry.text, admin_id: user?.id })
   }
 
   // Focused maintenance ticket (from property tickets modal)
@@ -4686,7 +4215,7 @@ export default function AdminPortal() {
           />
         )
       case 'analytics':
-        return <AnalyticsPanel initialSection={analyticsSection} rentRecords={rentRecords} tenants={tenants} properties={propertiesList} tickets={tickets} activityFeed={recentActivity} />
+        return <AnalyticsPanel initialSection={analyticsSection} rentRecords={rentRecords} tenants={tenants} />
       case 'properties':
         return (
           <PropertiesPanel
@@ -4741,7 +4270,7 @@ export default function AdminPortal() {
             onViewTenantProfile={(tenantId) => setViewTenantId(tenantId)}
           />
         )
-      case 'documents': return <DocumentsPanel onViewTenant={(id) => setViewTenantId(id)} tenants={tenants} properties={propertiesList} />
+      case 'documents': return <DocumentsPanel onViewTenant={(id) => setViewTenantId(id)} />
       case 'settings':
         return (
           <SettingsPanel
@@ -4929,13 +4458,7 @@ export default function AdminPortal() {
                       )}
                     </div>
                     <button
-                      onClick={() => {
-                        setNotifications(prev => {
-                          const next = prev.map(n => ({ ...n, read: true }))
-                          localStorage.setItem('bmp_readNotifs', JSON.stringify(next.map(n => n.id)))
-                          return next
-                        })
-                      }}
+                      onClick={() => setNotifications(prev => prev.map(n => ({ ...n, read: true })))}
                       className="text-xs text-blue-600 hover:text-blue-800 font-semibold"
                     >
                       Mark all read
@@ -4946,11 +4469,7 @@ export default function AdminPortal() {
                       <button
                         key={n.id}
                         onClick={() => {
-                          setNotifications(prev => {
-                            const next = prev.map(x => x.id === n.id ? { ...x, read: true } : x)
-                            localStorage.setItem('bmp_readNotifs', JSON.stringify(next.filter(x => x.read).map(x => x.id)))
-                            return next
-                          })
+                          setNotifications(prev => prev.map(x => x.id === n.id ? { ...x, read: true } : x))
                           if (n.type === 'maintenance') setActivePanel('maintenance')
                           else if (n.type === 'payment') setActivePanel('dashboard')
                           else if (n.type === 'lease') setActivePanel('tenants')
@@ -5035,7 +4554,7 @@ export default function AdminPortal() {
                   </div>
                   <div className="border-t border-gray-100 py-1">
                     <button
-                      onClick={async () => { setShowProfileMenu(false); await signOut(); navigate('/login') }}
+                      onClick={() => { navigate('/'); setShowProfileMenu(false) }}
                       className="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
                     >
                       <LogOut className="w-4 h-4" /> Log out
@@ -5046,22 +4565,6 @@ export default function AdminPortal() {
             </div>
           </div>
         </div>
-
-        {/* Demo mode banner */}
-        {demoMode && (
-          <div className="mx-4 mt-3 shrink-0 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
-            <p className="text-sm text-amber-800">
-              <span className="font-semibold">Test mode on</span> — showing fake data. Your real data is untouched.
-            </p>
-            <button
-              onClick={() => setDemoMode(false)}
-              className="ml-auto text-xs font-semibold text-amber-700 hover:text-amber-900 underline underline-offset-2"
-            >
-              Turn off
-            </button>
-          </div>
-        )}
 
         {/* Panel content */}
         <div className={`flex-1 overflow-hidden ${panelNeedsFullHeight ? '' : 'overflow-y-auto'}`}>
@@ -5116,11 +4619,8 @@ export default function AdminPortal() {
             setShowNewThreadModal(false)
           }}
           onCreateThread={(thread) => {
-            setThreads(prev => {
-              const exists = prev.find(t => t.id === thread.tenantId)
-              return exists ? prev : [...prev, { ...thread, id: thread.tenantId }]
-            })
-            setSelectedThreadId(thread.tenantId)
+            setThreads(prev => [...prev, thread])
+            setSelectedThreadId(thread.id)
             setActivePanel('messages')
             setShowNewThreadModal(false)
           }}
@@ -5132,14 +4632,9 @@ export default function AdminPortal() {
           tenants={tenants}
           tickets={tickets}
           onClose={() => setManagePropertyId(null)}
-          onUpdateProperty={async (updated) => {
+          onUpdateProperty={(updated) => {
             setPropertiesList(prev => prev.map(p => p.id === updated.id ? updated : p))
             showToast({ type: 'success', title: `Property "${updated.name}" updated` })
-            await supabase.from('properties').update({
-              name: updated.name,
-              address: updated.address,
-              city: updated.city,
-            }).eq('id', updated.id)
           }}
           onShowNewTicket={() => { setManagePropertyId(null); setShowNewTicketModal(true) }}
           setActivePanel={setActivePanel}
@@ -5152,21 +4647,9 @@ export default function AdminPortal() {
           tenant={tenants.find(t => t.id === editTenantId)!}
           properties={propertiesList}
           onClose={() => setEditTenantId(null)}
-          onSave={async (updated) => {
+          onSave={(updated) => {
             setTenants(prev => prev.map(t => t.id === updated.id ? updated : t))
             showToast({ type: 'success', title: `Tenant "${updated.name}" updated` })
-            const newPropId = propertiesList.find(p => p.name === updated.property)?.id
-            const unitId = newPropId && updated.unit
-              ? await findOrCreateUnit(newPropId, updated.unit, updated.rent)
-              : null
-            await supabase.from('tenants').update({
-              name: updated.name,
-              email: updated.email,
-              phone: updated.phone,
-              monthly_rent: updated.rent,
-              status: updated.status,
-              ...(unitId ? { unit_id: unitId } : {}),
-            }).eq('id', updated.id)
             setEditTenantId(null)
           }}
         />
@@ -5179,11 +4662,12 @@ export default function AdminPortal() {
           onMessage={(tenantId) => {
             const tenant = tenants.find(t => t.id === tenantId)
             if (!tenant) return
-            const existing = threads.find(th => th.tenantId === tenantId)
-            if (!existing) {
-              setThreads(prev => [...prev, { id: tenantId, tenantId, tenantName: tenant.name, tenantUnit: `${tenant.property} · Unit ${tenant.unit}`, unread: 0, lastMessage: '', lastTime: '' }])
+            let thread = threads.find(th => th.tenantId === tenantId)
+            if (!thread) {
+              thread = { id: `thread-${Date.now()}`, tenantId, tenantName: tenant.name, tenantUnit: `${tenant.property} · Unit ${tenant.unit}`, unread: 0, lastMessage: '', lastTime: '' }
+              setThreads(prev => [...prev, thread!])
             }
-            setSelectedThreadId(tenantId)
+            setSelectedThreadId(thread.id)
             setActivePanel('messages')
             setViewTenantId(null)
           }}
@@ -5221,25 +4705,12 @@ export default function AdminPortal() {
           <LogPaymentModal
             tenant={t}
             onClose={() => setLogPaymentTenantId(null)}
-            onSave={async (record) => {
+            onSave={(record) => {
               setRentRecords(prev => {
                 const filtered = prev.filter(r => !(r.tenantId === record.tenantId && r.month === record.month))
                 return [...filtered, record]
               })
-              // Persist to Supabase — month string like "June 2026" parses to the 1st of that month
-              const dueDate = new Date(record.month)
-              const { error } = await supabase.from('rent_payments').insert({
-                pm_id: user?.id,
-                tenant_id: record.tenantId,
-                amount: record.amount,
-                due_date: (isNaN(dueDate.getTime()) ? new Date() : dueDate).toISOString().slice(0, 10),
-                paid_date: record.datePaid ? new Date(record.datePaid).toISOString().slice(0, 10) : null,
-                status: record.status,
-                note: record.method || null,
-              })
-              if (error) showToast({ type: 'error', title: 'Failed to save payment' })
               addActivity({ type: 'payment', text: `${t.name} rent logged — $${record.amount.toLocaleString()} · ${t.property}` })
-              refetchRentRecords()
               setLogPaymentTenantId(null)
             }}
           />
