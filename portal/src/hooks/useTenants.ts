@@ -20,7 +20,7 @@ function transform(row: Record<string, unknown>): Tenant {
     propertyId: (unit?.property_id as string) ?? undefined,
     rent: (row.monthly_rent as number) ?? 0,
     leaseEnd: fmtDate(row.lease_end as string | null),
-    status: (row.status as Tenant['status']) ?? 'current',
+    status: (row.status as Tenant['status']) ?? 'active',
     email: (row.email as string) ?? '',
     phone: (row.phone as string) ?? '',
     moveIn: fmtDate(row.lease_start as string | null),

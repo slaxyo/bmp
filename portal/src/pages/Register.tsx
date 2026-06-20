@@ -1,31 +1,34 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { Building2, Eye, EyeOff, AlertCircle, CheckCircle2, User, Mail, Lock, ChevronDown } from 'lucide-react'
+import { Eye, EyeOff, AlertCircle, CheckCircle2, User, Mail, Lock, Building2, Home, ShieldCheck, Phone } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
+import { useBranding } from '../context/BrandingContext'
+import { BrandLogo } from '../components/BrandLogo'
 
 type Role = 'tenant' | 'owner' | 'admin'
 
-const ROLES: { value: Role; label: string; description: string }[] = [
-  { value: 'tenant', label: 'Tenant', description: 'I rent a property managed by BMP' },
-  { value: 'owner', label: 'Property Owner', description: 'I own properties managed by BMP' },
-  { value: 'admin', label: 'Admin / Property Manager', description: 'I manage properties on behalf of BMP' },
+const ROLES: { value: Role; label: string; description: string; icon: React.ReactNode }[] = [
+  { value: 'tenant', label: 'Tenant', description: 'I rent a property', icon: <Home className="w-5 h-5" /> },
+  { value: 'owner', label: 'Owner', description: 'I own properties', icon: <Building2 className="w-5 h-5" /> },
+  { value: 'admin', label: 'Admin', description: 'I manage properties', icon: <ShieldCheck className="w-5 h-5" /> },
 ]
 
 export default function Register() {
   const navigate = useNavigate()
   const { signUp, user, role } = useAuth()
+  const { companyName } = useBranding()
 
   const [step, setStep] = useState<'form' | 'confirm'>('form')
 
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
+  const [company, setCompany] = useState('')
+  const [phone, setPhone] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [selectedRole, setSelectedRole] = useState<Role>('tenant')
   const [showPw, setShowPw] = useState(false)
   const [showConfirmPw, setShowConfirmPw] = useState(false)
-  const [showRoleDropdown, setShowRoleDropdown] = useState(false)
-
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -58,7 +61,8 @@ export default function Register() {
       email.trim(),
       password,
       fullName.trim(),
-      selectedRole
+      selectedRole,
+      { company: company.trim() || undefined, phone: phone.trim() || undefined }
     )
 
     if (signUpError) {
@@ -79,17 +83,13 @@ export default function Register() {
     setLoading(false)
   }
 
-  const activeRoleLabel = ROLES.find(r => r.value === selectedRole)!
-
   if (step === 'confirm') {
     return (
       <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center px-4">
         <div className="w-full max-w-sm text-center">
           <div className="flex items-center justify-center gap-2 mb-8">
-            <div className="w-9 h-9 bg-blue-600 rounded-xl flex items-center justify-center">
-              <Building2 className="w-5 h-5 text-white" />
-            </div>
-            <span className="text-xl font-bold text-gray-900">BMP Central</span>
+            <BrandLogo wrapperClassName="w-9 h-9 bg-blue-600 rounded-xl flex items-center justify-center overflow-hidden" iconClassName="w-5 h-5 text-white" />
+            <span className="text-xl font-bold text-gray-900">{companyName}</span>
           </div>
 
           <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-8">
@@ -120,10 +120,8 @@ export default function Register() {
     <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center px-4 py-12">
       <div className="w-full max-w-sm">
         <div className="flex items-center justify-center gap-2 mb-8">
-          <div className="w-9 h-9 bg-blue-600 rounded-xl flex items-center justify-center">
-            <Building2 className="w-5 h-5 text-white" />
-          </div>
-          <span className="text-xl font-bold text-gray-900">BMP Central</span>
+          <BrandLogo wrapperClassName="w-9 h-9 bg-blue-600 rounded-xl flex items-center justify-center overflow-hidden" iconClassName="w-5 h-5 text-white" />
+          <span className="text-xl font-bold text-gray-900">{companyName}</span>
         </div>
 
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-8">
@@ -170,33 +168,58 @@ export default function Register() {
               </div>
             </div>
 
+            {/* Company */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1.5">Company <span className="font-normal text-gray-400">(optional)</span></label>
+              <div className="relative">
+                <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  type="text"
+                  value={company}
+                  onChange={(e) => { setCompany(e.target.value); setError(null) }}
+                  placeholder="Acme Property Management"
+                  autoComplete="organization"
+                  className="w-full pl-9 pr-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+            </div>
+
+            {/* Phone */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1.5">Phone number <span className="font-normal text-gray-400">(optional)</span></label>
+              <div className="relative">
+                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  type="tel"
+                  value={phone}
+                  onChange={(e) => { setPhone(e.target.value); setError(null) }}
+                  placeholder="+1 (555) 000-0000"
+                  autoComplete="tel"
+                  className="w-full pl-9 pr-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+            </div>
+
             {/* Role selector */}
             <div>
-              <label className="block text-xs font-semibold text-gray-700 mb-1.5">I am a…</label>
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => setShowRoleDropdown((v) => !v)}
-                  className="w-full flex items-center justify-between px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white hover:bg-gray-50 transition-colors"
-                >
-                  <span className="font-medium text-gray-900">{activeRoleLabel.label}</span>
-                  <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showRoleDropdown ? 'rotate-180' : ''}`} />
-                </button>
-                {showRoleDropdown && (
-                  <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-20 overflow-hidden">
-                    {ROLES.map((r) => (
-                      <button
-                        key={r.value}
-                        type="button"
-                        onClick={() => { setSelectedRole(r.value); setShowRoleDropdown(false) }}
-                        className={`w-full text-left px-4 py-3 hover:bg-gray-50 transition-colors border-b border-gray-50 last:border-0 ${selectedRole === r.value ? 'bg-blue-50' : ''}`}
-                      >
-                        <p className={`text-sm font-semibold ${selectedRole === r.value ? 'text-blue-700' : 'text-gray-900'}`}>{r.label}</p>
-                        <p className="text-xs text-gray-400 mt-0.5">{r.description}</p>
-                      </button>
-                    ))}
-                  </div>
-                )}
+              <label className="block text-xs font-semibold text-gray-700 mb-2">I am a…</label>
+              <div className="grid grid-cols-3 gap-2">
+                {ROLES.map((r) => (
+                  <button
+                    key={r.value}
+                    type="button"
+                    onClick={() => { setSelectedRole(r.value); setError(null) }}
+                    className={`flex flex-col items-center gap-1.5 px-2 py-3 rounded-xl border-2 transition-all text-center ${
+                      selectedRole === r.value
+                        ? 'border-blue-500 bg-blue-50 text-blue-700'
+                        : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    <span className={selectedRole === r.value ? 'text-blue-600' : 'text-gray-400'}>{r.icon}</span>
+                    <span className="text-xs font-semibold leading-tight">{r.label}</span>
+                    <span className="text-[10px] text-gray-400 leading-tight">{r.description}</span>
+                  </button>
+                ))}
               </div>
             </div>
 

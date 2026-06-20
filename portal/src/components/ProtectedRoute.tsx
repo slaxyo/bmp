@@ -19,7 +19,9 @@ export default function ProtectedRoute({ children, roles }: Props) {
   }
 
   if (!user) return <Navigate to="/login" replace />
-  if (roles && role && !roles.includes(role)) return <Navigate to="/login" replace />
+  // Fail closed: a route that declares allowed roles requires a resolved role
+  // that is in the list. A null/unknown role never gets through.
+  if (roles && (!role || !roles.includes(role))) return <Navigate to="/login" replace />
 
   return <>{children}</>
 }

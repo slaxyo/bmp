@@ -20,7 +20,7 @@ function useLocalState<T>(key: string, def: T): [T, (v: T) => void] {
   return [val, set]
 }
 import {
-  Building2, DollarSign, Wrench, TrendingUp, Bell,
+  Building2, DollarSign, Wrench, TrendingUp,
   ChevronDown, Download, FileText, Calendar,
   AlertTriangle, BarChart2, RefreshCw, X, Users,
   Phone, Mail, Star, Zap, Search,
@@ -39,6 +39,9 @@ import { useProperties } from '../hooks/useProperties'
 import { useMaintenanceTickets } from '../hooks/useMaintenanceTickets'
 import { useTenants } from '../hooks/useTenants'
 import { showToast } from '../components/Toast'
+import { useBranding } from '../context/BrandingContext'
+import { BrandLogo } from '../components/BrandLogo'
+import { NotificationBell } from '../components/NotificationBell'
 
 type OwnerTab = 'overview' | 'properties' | 'financials' | 'maintenance' | 'reports'
 
@@ -260,8 +263,8 @@ function TenantProfileModal({ tenantId, onClose }: { tenantId: string; onClose: 
               <div>
                 <h2 className="text-lg font-black text-gray-900">{tenant.name}</h2>
                 <p className="text-sm text-gray-500">Unit {tenant.unit} · {tenant.property}</p>
-                <span className={`inline-block mt-1 text-xs font-bold px-2 py-0.5 rounded-full ${tenant.status === 'current' ? 'bg-green-100 text-green-700' : tenant.status === 'late' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
-                  {tenant.status === 'current' ? 'Current' : tenant.status === 'late' ? 'Late' : 'Notice'}
+                <span className={`inline-block mt-1 text-xs font-bold px-2 py-0.5 rounded-full ${tenant.status === 'active' ? 'bg-green-100 text-green-700' : tenant.status === 'late' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
+                  {tenant.status === 'active' ? 'Active' : tenant.status === 'late' ? 'Late' : tenant.status === 'notice' ? 'Notice' : 'Past'}
                 </span>
               </div>
             </div>
@@ -655,7 +658,7 @@ function PropertyManageSheet({ property, onClose }: { property: Property; onClos
                         <div className="flex items-center gap-2 text-right">
                           <div>
                             <p className="text-sm font-black text-gray-900">${t.rent.toLocaleString()}/mo</p>
-                            {full && <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full ${full.status === 'current' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{full.status}</span>}
+                            {full && <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full ${full.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{full.status}</span>}
                           </div>
                           <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-blue-500" />
                         </div>
@@ -842,6 +845,7 @@ function PropertyManageSheet({ property, onClose }: { property: Property; onClos
 interface ReportData { id: string; title: string }
 
 function OwnerReportModal({ report, onClose }: { report: ReportData; onClose: () => void }) {
+  const { companyName } = useBranding()
   const reportContent: Record<string, React.ReactNode> = {
     monthly: (
       <div className="space-y-4">
@@ -916,7 +920,7 @@ function OwnerReportModal({ report, onClose }: { report: ReportData; onClose: ()
     <ModalBackdrop onClose={onClose}>
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl max-h-[88vh] overflow-y-auto">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-          <div><h2 className="text-base font-bold text-gray-900">{report.title}</h2><p className="text-xs text-gray-500">BMP Central · Owner Portal</p></div>
+          <div><h2 className="text-base font-bold text-gray-900">{report.title}</h2><p className="text-xs text-gray-500">{companyName} · Owner Portal</p></div>
           <button onClick={onClose} className="w-8 h-8 rounded-lg bg-gray-100 hover:bg-gray-200 flex items-center justify-center"><X className="w-4 h-4" /></button>
         </div>
         <div className="p-6">
@@ -1443,18 +1447,21 @@ function ReportsTab() {
 
 export default function OwnerPortal() {
   const { user, signOut } = useAuth()
-  const { data: propertiesData } = useProperties()
-  const { data: tenantsData } = useTenants()
-  const { data: ticketsData } = useMaintenanceTickets()
+  const { companyName } = useBranding()
+  const { data: propertiesData, loading: propertiesLoading } = useProperties()
+  const { data: tenantsData, loading: tenantsLoading } = useTenants()
+  const { data: ticketsData, loading: ticketsLoading } = useMaintenanceTickets()
   const [activeTab, setActiveTab] = useLocalState<OwnerTab>('bmp_owner_tab', 'overview')
   const [showHealthModal, setShowHealthModal] = useState(false)
 
   const [allProperties, setAllProperties] = useState<Property[]>([])
   const [allTenants, setAllTenants] = useState<Tenant[]>([])
   const [allTickets, setAllTickets] = useState<MaintenanceTicket[]>([])
-  useEffect(() => { if (propertiesData.length) setAllProperties(propertiesData) }, [propertiesData])
-  useEffect(() => { if (tenantsData.length) setAllTenants(tenantsData) }, [tenantsData])
-  useEffect(() => { if (ticketsData.length) setAllTickets(ticketsData) }, [ticketsData])
+  // Sync once the fetch settles — syncing on `!loading` (not `data.length`) so
+  // empty real results correctly clear stale or demo data.
+  useEffect(() => { if (!propertiesLoading) setAllProperties(propertiesData) }, [propertiesData, propertiesLoading])
+  useEffect(() => { if (!tenantsLoading) setAllTenants(tenantsData) }, [tenantsData, tenantsLoading])
+  useEffect(() => { if (!ticketsLoading) setAllTickets(ticketsData) }, [ticketsData, ticketsLoading])
 
   const ownerName = user?.user_metadata?.full_name || user?.email || 'Owner'
 
@@ -1486,18 +1493,14 @@ export default function OwnerPortal() {
       {/* Header */}
       <header className="bg-white border-b border-gray-200 px-6 h-14 flex items-center justify-between sticky top-0 z-30 shadow-sm">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-xl flex items-center justify-center shadow" style={{ background: 'linear-gradient(135deg, #3B82F6, #1D4ED8)' }}>
-            <Building2 className="w-4 h-4 text-white" />
-          </div>
+          <BrandLogo wrapperClassName="w-8 h-8 rounded-xl flex items-center justify-center shadow overflow-hidden" iconClassName="w-4 h-4 text-white" style={{ background: 'linear-gradient(135deg, #3B82F6, #1D4ED8)' }} />
           <div>
-            <p className="font-black text-gray-900 text-sm leading-none">BMP Central</p>
+            <p className="font-black text-gray-900 text-sm leading-none">{companyName}</p>
             <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider leading-none mt-0.5">Owner Portal</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button className="w-8 h-8 rounded-lg bg-gray-50 hover:bg-gray-100 flex items-center justify-center transition-colors">
-            <Bell className="w-4 h-4 text-gray-500" />
-          </button>
+          <NotificationBell align="right" />
           <button
             onClick={async () => { await signOut() }}
             className="flex items-center gap-2 pl-2 pr-3 py-1 rounded-full border border-gray-200 hover:border-red-200 hover:bg-red-50 transition-all"

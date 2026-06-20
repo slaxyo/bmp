@@ -17,7 +17,7 @@ function transform(row: Record<string, unknown>): RentRecord {
     datePaid: row.paid_date
       ? new Date(row.paid_date as string).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
       : '',
-    method: '',
+    method: (row.note as string) ?? '',
     status: (row.status as RentRecord['status']) ?? 'pending',
   }
 }

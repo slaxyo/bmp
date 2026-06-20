@@ -69,6 +69,18 @@ export type Database = {
         Update: Record<string, never>
         Relationships: []
       }
+      notifications: {
+        Row: { id: string; user_id: string; type: string; title: string; body: string; link: string | null; read: boolean; created_at: string }
+        Insert: { user_id: string; type?: string; title: string; body?: string; link?: string | null; read?: boolean }
+        Update: { read?: boolean }
+        Relationships: []
+      }
+      branding: {
+        Row: { pm_id: string; company_name: string; tagline: string | null; logo_url: string | null; primary_color: string; updated_at: string }
+        Insert: { pm_id: string; company_name?: string; tagline?: string | null; logo_url?: string | null; primary_color?: string; updated_at?: string }
+        Update: { company_name?: string; tagline?: string | null; logo_url?: string | null; primary_color?: string; updated_at?: string }
+        Relationships: []
+      }
     }
   }
 }

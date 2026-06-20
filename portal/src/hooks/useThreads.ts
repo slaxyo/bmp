@@ -4,6 +4,18 @@ import type { Thread } from '../data/mockData'
 import { messageThreads as mockThreads } from '../data/mockData'
 import { useDemoMode } from '../context/DemoModeContext'
 
+function previewText(body: string): string {
+  const lines = body.split('\n')
+  const parts = lines.map(line => {
+    try {
+      const url = new URL(line.trim())
+      if (/\.(jpg|jpeg|png|gif|webp)(\?|$)/i.test(url.pathname)) return '📷 Image'
+    } catch { /* not a URL */ }
+    return line
+  })
+  return parts.filter(Boolean).join(' · ').slice(0, 60)
+}
+
 // Synthesizes threads from tenants + messages (no threads table in real schema).
 // Thread ID = tenant ID. `viewer` controls whose unread messages are counted:
 // the PM counts unread tenant messages, the tenant counts unread PM messages.
@@ -63,7 +75,7 @@ export function useThreads(tenantId?: string, viewer: 'pm' | 'tenant' = 'pm') {
           tenantName: row.name as string,
           tenantUnit: `${property?.name ?? ''} · Unit ${unit?.unit_number ?? ''}`,
           unread: unread[tid] ?? 0,
-          lastMessage: last ? (last.body as string) : '',
+          lastMessage: last ? previewText(last.body as string) : '',
           lastTime: last
             ? new Date(last.created_at as string).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
             : '',

@@ -8,7 +8,7 @@ export interface Tenant {
   propertyId?: string
   rent: number
   leaseEnd: string
-  status: 'current' | 'late' | 'notice'
+  status: 'active' | 'late' | 'notice' | 'past' | 'invited'
   email: string
   phone: string
   moveIn: string
@@ -143,7 +143,7 @@ export const tenants: Tenant[] = [
     property: '14 Oakwood Drive',
     rent: 1450,
     leaseEnd: 'Dec 31, 2026',
-    status: 'current',
+    status: 'active',
     email: 'sarah.mitchell@email.com',
     phone: '+1 (512) 555-0101',
     moveIn: 'Jan 1, 2026',
@@ -155,7 +155,7 @@ export const tenants: Tenant[] = [
     property: '14 Oakwood Drive',
     rent: 1450,
     leaseEnd: 'Nov 30, 2026',
-    status: 'current',
+    status: 'active',
     email: 'r.kim@email.com',
     phone: '+1 (512) 555-0102',
     moveIn: 'Dec 1, 2025',
@@ -167,7 +167,7 @@ export const tenants: Tenant[] = [
     property: '14 Oakwood Drive',
     rent: 1500,
     leaseEnd: 'Oct 31, 2026',
-    status: 'current',
+    status: 'active',
     email: 'emily.chen@email.com',
     phone: '+1 (512) 555-0103',
     moveIn: 'Nov 1, 2025',
@@ -179,7 +179,7 @@ export const tenants: Tenant[] = [
     property: '14 Oakwood Drive',
     rent: 1400,
     leaseEnd: 'Jan 31, 2027',
-    status: 'current',
+    status: 'active',
     email: 'm.johnson@email.com',
     phone: '+1 (512) 555-0104',
     moveIn: 'Feb 1, 2026',
@@ -191,7 +191,7 @@ export const tenants: Tenant[] = [
     property: '7 Maple Lane',
     rent: 1500,
     leaseEnd: 'Feb 28, 2027',
-    status: 'current',
+    status: 'active',
     email: 'priya.s@email.com',
     phone: '+1 (512) 555-0105',
     moveIn: 'Mar 1, 2026',
@@ -203,7 +203,7 @@ export const tenants: Tenant[] = [
     property: '7 Maple Lane',
     rent: 1450,
     leaseEnd: 'Sep 30, 2026',
-    status: 'current',
+    status: 'active',
     email: 'd.park@email.com',
     phone: '+1 (512) 555-0106',
     moveIn: 'Oct 1, 2025',
@@ -227,7 +227,7 @@ export const tenants: Tenant[] = [
     property: '7 Maple Lane',
     rent: 1450,
     leaseEnd: 'Mar 31, 2027',
-    status: 'current',
+    status: 'active',
     email: 't.webb@email.com',
     phone: '+1 (512) 555-0108',
     moveIn: 'Apr 1, 2026',
@@ -239,7 +239,7 @@ export const tenants: Tenant[] = [
     property: '12 Elmwood Court',
     rent: 1400,
     leaseEnd: 'Dec 31, 2026',
-    status: 'current',
+    status: 'active',
     email: 'a.torres@email.com',
     phone: '+1 (512) 555-0109',
     moveIn: 'Jan 1, 2026',
@@ -251,7 +251,7 @@ export const tenants: Tenant[] = [
     property: '12 Elmwood Court',
     rent: 1400,
     leaseEnd: 'Nov 30, 2026',
-    status: 'current',
+    status: 'active',
     email: 'k.brooks@email.com',
     phone: '+1 (512) 555-0110',
     moveIn: 'Dec 1, 2025',
@@ -263,7 +263,7 @@ export const tenants: Tenant[] = [
     property: '12 Elmwood Court',
     rent: 1400,
     leaseEnd: 'Oct 31, 2026',
-    status: 'current',
+    status: 'active',
     email: 'n.patel@email.com',
     phone: '+1 (512) 555-0111',
     moveIn: 'Nov 1, 2025',

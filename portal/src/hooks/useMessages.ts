@@ -55,7 +55,7 @@ export function useMessages(threadId: string | null) {
         supabase
           .from('messages')
           .select('*, tenants!tenant_id(name)')
-          .eq('id', row.id)
+          .eq('id', row.id as string)
           .single()
           .then(({ data: fullRow }) => {
             if (fullRow) setData((prev) => [...prev, transform(fullRow as Record<string, unknown>)])

@@ -6,7 +6,7 @@ import {
   Smile, Paperclip, Edit2, Home, DollarSign, Bell, X,
   Eye, EyeOff, Camera, Pencil, CheckCircle, LogOut, HelpCircle,
   Keyboard, TrendingUp, BarChart2, AlertTriangle, Search, ChevronUp, ChevronDown,
-  CreditCard, Receipt, AlertCircle,
+  CreditCard, Receipt, AlertCircle, Trash2,
 } from 'lucide-react'
 import {
   XAxis, YAxis, CartesianGrid, Tooltip,
@@ -26,6 +26,11 @@ import { useThreads } from '../hooks/useThreads'
 import { useMessages } from '../hooks/useMessages'
 import { useDocuments } from '../hooks/useDocuments'
 import { showToast } from '../components/Toast'
+import { useBranding } from '../context/BrandingContext'
+import { BrandLogo } from '../components/BrandLogo'
+import { NotificationBell } from '../components/NotificationBell'
+import { NotificationsProvider } from '../hooks/useNotifications'
+import { notifyUser, sendDirectEmail } from '../lib/notify'
 
 // ─── Sidebar Nav Items ────────────────────────────────────────────────────────
 
@@ -102,6 +107,7 @@ interface InviteTenantModalProps {
 }
 
 function InviteTenantModal({ properties, onClose, onAdd }: InviteTenantModalProps) {
+  const { demoMode } = useDemoMode()
   const [form, setForm] = useState({
     name: '', email: '', phone: '', unit: '', property: '', rent: '', leaseStart: '', leaseEnd: '',
     emergencyName: '', emergencyPhone: '', moveIn: '', deposit: '', petPolicy: 'No Pets', parking: '', notes: '',
@@ -120,12 +126,20 @@ function InviteTenantModal({ properties, onClose, onAdd }: InviteTenantModalProp
     return e
   }
 
+  const [submitting, setSubmitting] = useState(false)
+  const [inviteLink, setInviteLink] = useState<string | null>(null)
+
   async function handleSubmit() {
+    if (demoMode) { showToast({ type: 'info', title: 'Demo mode — no changes saved' }); onClose(); return }
     const e = validate()
     if (Object.keys(e).length > 0) { setErrors(e); return }
+
+    setSubmitting(true)
     const selectedProp = properties.find(p => p.id === form.property)
     const { data: { user: pmUser } } = await supabase.auth.getUser()
     const unitId = await findOrCreateUnit(form.property, form.unit.trim(), Number(form.rent))
+    const inviteToken = crypto.randomUUID()
+
     const { data, error } = await supabase.from('tenants').insert({
       id: crypto.randomUUID(),
       pm_id: pmUser!.id,
@@ -136,10 +150,14 @@ function InviteTenantModal({ properties, onClose, onAdd }: InviteTenantModalProp
       monthly_rent: Number(form.rent),
       lease_start: form.leaseStart || null,
       lease_end: form.leaseEnd || new Date(Date.now() + 365 * 24 * 3600 * 1000).toISOString().slice(0, 10),
-      status: 'current',
+      status: 'invited',
+      invite_token: inviteToken,
       notes: form.notes.trim() || null,
     }).select().single()
-    if (error) { showToast({ type: 'error', title: 'Failed to add tenant: ' + error.message }); return }
+
+    setSubmitting(false)
+    if (error) { showToast({ type: 'error', title: 'Failed to create invite: ' + error.message }); return }
+
     const newTenant: Tenant = {
       id: data.id,
       name: form.name.trim(),
@@ -150,12 +168,29 @@ function InviteTenantModal({ properties, onClose, onAdd }: InviteTenantModalProp
       propertyId: form.property,
       rent: Number(form.rent),
       leaseEnd: form.leaseEnd || 'TBD',
-      status: 'current',
-      moveIn: form.leaseStart || new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+      status: 'invited',
+      moveIn: form.leaseStart || '',
     }
     onAdd(newTenant)
-    showToast({ type: 'success', title: `Tenant ${form.name} added` })
-    onClose()
+
+    // Build invite link
+    const link = `${window.location.origin}/invite?token=${inviteToken}`
+    setInviteLink(link)
+
+    // Send invite email via Edge Function (no-op if VITE_FUNCTIONS_URL not set)
+    const htmlBody = `<!doctype html><html><body style="font-family:system-ui,sans-serif;background:#f3f4f6;padding:24px">
+      <div style="max-width:480px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;border:1px solid #e5e7eb">
+        <div style="background:#2563EB;padding:20px 24px"><h1 style="margin:0;color:#fff;font-size:16px">You've been invited to your tenant portal</h1></div>
+        <div style="padding:24px">
+          <p style="color:#374151;font-size:14px;line-height:1.6;margin:0 0 16px">
+            Your property manager has set up an account for you. Click the button below to create your password and access your portal.
+          </p>
+          <a href="${link}" style="display:inline-block;background:#2563EB;color:#fff;text-decoration:none;font-weight:600;font-size:14px;padding:10px 18px;border-radius:10px">Accept Invite &amp; Create Account</a>
+          <p style="color:#9CA3AF;font-size:12px;margin:16px 0 0">Or copy this link: ${link}</p>
+        </div>
+      </div>
+    </body></html>`
+    sendDirectEmail(form.email.trim(), 'You\'ve been invited to your tenant portal', htmlBody).catch(() => {})
   }
 
   const fi = (key: keyof typeof form, label: string, type = 'text', req = false) => (
@@ -245,10 +280,35 @@ function InviteTenantModal({ properties, onClose, onAdd }: InviteTenantModalProp
             </div>
           </div>
 
-          <div className="flex gap-3 pt-2">
-            <button onClick={onClose} className="flex-1 border border-gray-200 hover:bg-gray-50 text-gray-700 font-semibold py-2.5 rounded-xl text-sm transition-colors">Cancel</button>
-            <button onClick={handleSubmit} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors">Send Invite</button>
-          </div>
+          {inviteLink ? (
+            <div className="space-y-4 pt-2">
+              <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-xl px-4 py-3">
+                <CheckCircle className="w-5 h-5 text-green-600 shrink-0" />
+                <div>
+                  <p className="text-sm font-semibold text-green-800">Invite created!</p>
+                  <p className="text-xs text-green-700">Email sent if configured — share this link manually as a backup:</p>
+                </div>
+              </div>
+              <div className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 flex items-center gap-2">
+                <p className="text-xs text-gray-700 flex-1 truncate font-mono">{inviteLink}</p>
+                <button
+                  onClick={() => { navigator.clipboard.writeText(inviteLink); showToast({ type: 'success', title: 'Link copied!' }) }}
+                  className="shrink-0 text-xs font-semibold text-blue-600 hover:text-blue-700 px-2 py-1 rounded-lg hover:bg-blue-50 transition-colors"
+                >
+                  Copy
+                </button>
+              </div>
+              <button onClick={onClose} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors">Done</button>
+            </div>
+          ) : (
+            <div className="flex gap-3 pt-2">
+              <button onClick={onClose} className="flex-1 border border-gray-200 hover:bg-gray-50 text-gray-700 font-semibold py-2.5 rounded-xl text-sm transition-colors">Cancel</button>
+              <button onClick={handleSubmit} disabled={submitting} className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors flex items-center justify-center gap-2">
+                {submitting && <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+                {submitting ? 'Sending…' : 'Send Invite'}
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </ModalBackdrop>
@@ -263,6 +323,7 @@ interface AddPropertyModalProps {
 }
 
 function AddPropertyModal({ onClose, onAdd }: AddPropertyModalProps) {
+  const { demoMode } = useDemoMode()
   const [step, setStep] = useState(1)
   const [form, setForm] = useState({
     propertyName: '', address: '', city: '', state: '', zip: '', propertyType: 'Apartment Complex', units: '', yearBuilt: '',
@@ -291,6 +352,7 @@ function AddPropertyModal({ onClose, onAdd }: AddPropertyModalProps) {
   }
 
   async function handleSubmit() {
+    if (demoMode) { showToast({ type: 'info', title: 'Demo mode — no changes saved' }); onClose(); return }
     const name = form.propertyName.trim() || form.address.trim()
     const { data: { user: pmUser } } = await supabase.auth.getUser()
     const { data, error } = await supabase.from('properties').insert({
@@ -458,10 +520,12 @@ interface NewTicketModalProps {
 }
 
 function NewTicketModal({ tenants, onClose, onAdd }: NewTicketModalProps) {
+  const { demoMode } = useDemoMode()
   const [form, setForm] = useState({ tenantId: '', issueType: '', priority: '', summary: '', description: '' })
   const [errors, setErrors] = useState<Record<string, string>>({})
 
   async function handleSubmit() {
+    if (demoMode) { showToast({ type: 'info', title: 'Demo mode — no changes saved' }); onClose(); return }
     const e: Record<string, string> = {}
     if (!form.summary.trim()) e.summary = 'Required'
     if (!form.issueType) e.issueType = 'Required'
@@ -582,32 +646,66 @@ interface LogPaymentModalProps {
 }
 
 function LogPaymentModal({ tenant, onClose, onSave }: LogPaymentModalProps) {
-  const today = new Date('2026-06-11')
+  const today = new Date()
   const months: string[] = []
   for (let i = 0; i < 6; i++) {
     const d = new Date(today.getFullYear(), today.getMonth() - i, 1)
     months.push(d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }))
   }
+  const todayStr = today.toISOString().slice(0, 10)
   const [form, setForm] = useState({
     month: months[0],
     amount: String(tenant.rent),
-    datePaid: '2026-06-11',
+    datePaid: todayStr,
     method: 'ACH',
     notes: '',
     status: 'paid' as 'paid' | 'late' | 'pending',
   })
+  const [saving, setSaving] = useState(false)
 
-  function handleSave() {
+  async function handleSave() {
+    setSaving(true)
+    // Derive a due_date from the selected month string (e.g. "June 2026" → 2026-06-01)
+    const parsed = new Date(form.month)
+    const dueDate = isNaN(parsed.getTime())
+      ? todayStr
+      : `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, '0')}-01`
+
+    const { data: { user: pmUser } } = await supabase.auth.getUser()
+    const { data, error } = await supabase.from('rent_payments').insert({
+      pm_id: pmUser!.id,
+      tenant_id: tenant.id,
+      amount: Number(form.amount),
+      due_date: dueDate,
+      paid_date: form.status !== 'pending' ? form.datePaid : null,
+      status: form.status,
+      note: form.notes.trim() || null,
+    }).select().single()
+
+    setSaving(false)
+    if (error) {
+      showToast({ type: 'error', title: 'Failed to log payment: ' + error.message })
+      return
+    }
+
     const record: RentRecord = {
-      id: `rr-${Date.now()}`,
+      id: data.id,
       tenantId: tenant.id,
       month: form.month,
       amount: Number(form.amount),
-      datePaid: new Date(form.datePaid).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+      datePaid: form.status !== 'pending' ? new Date(form.datePaid).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '',
       method: form.method,
       status: form.status,
     }
     onSave(record)
+    if (form.status === 'paid') {
+      notifyUser(tenant.id, {
+        type: 'payment',
+        title: 'Payment confirmed',
+        body: `Your ${form.month} rent payment of $${Number(form.amount).toLocaleString()} has been confirmed by your property manager.`,
+        link: '/tenant',
+      })
+    }
     showToast({ type: 'success', title: `Payment logged for ${tenant.name} — ${form.month}` })
     onClose()
   }
@@ -674,9 +772,10 @@ function LogPaymentModal({ tenant, onClose, onSave }: LogPaymentModalProps) {
               className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
           </div>
           <div className="flex gap-3 pt-2">
-            <button onClick={onClose} className="flex-1 border border-gray-200 hover:bg-gray-50 text-gray-700 font-semibold py-2.5 rounded-xl text-sm">Cancel</button>
-            <button onClick={handleSave} className="flex-1 bg-green-600 hover:bg-green-700 text-white font-semibold py-2.5 rounded-xl text-sm flex items-center justify-center gap-2">
-              <CreditCard className="w-4 h-4" /> Log Payment
+            <button onClick={onClose} disabled={saving} className="flex-1 border border-gray-200 hover:bg-gray-50 text-gray-700 font-semibold py-2.5 rounded-xl text-sm">Cancel</button>
+            <button onClick={handleSave} disabled={saving} className="flex-1 bg-green-600 hover:bg-green-700 disabled:opacity-60 text-white font-semibold py-2.5 rounded-xl text-sm flex items-center justify-center gap-2">
+              {saving ? <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <CreditCard className="w-4 h-4" />}
+              {saving ? 'Saving…' : 'Log Payment'}
             </button>
           </div>
         </div>
@@ -774,13 +873,14 @@ function PropertyTicketsModal({ property, tickets, onClose, onViewTicket }: Prop
 // ─── Report Modal ─────────────────────────────────────────────────────────────
 
 function ReportModal({ onClose }: { onClose: () => void }) {
+  const { companyName } = useBranding()
   return (
     <ModalBackdrop onClose={onClose}>
       <div className="bg-white rounded-xl border border-gray-200 shadow-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-scale-in">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
           <div>
             <h2 className="text-lg font-bold text-gray-900">Monthly Report — June 2026</h2>
-            <p className="text-xs text-gray-500">BMP Central · Admin Portal</p>
+            <p className="text-xs text-gray-500">{companyName} · Admin Portal</p>
           </div>
           <button onClick={onClose} className="w-8 h-8 rounded-lg bg-gray-100 hover:bg-gray-200 flex items-center justify-center"><X className="w-4 h-4" /></button>
         </div>
@@ -867,6 +967,7 @@ interface AnnouncementModalProps {
 }
 
 function AnnouncementModal({ tenants, properties, onClose, onSent }: AnnouncementModalProps) {
+  const { companyName } = useBranding()
   const [form, setForm] = useState({ recipient: 'all', property: '', subject: '', message: '' })
   const [errors, setErrors] = useState<Record<string, string>>({})
 
@@ -875,8 +976,13 @@ function AnnouncementModal({ tenants, properties, onClose, onSent }: Announcemen
     if (!form.subject.trim()) e.subject = 'Required'
     if (!form.message.trim()) e.message = 'Required'
     if (Object.keys(e).length > 0) { setErrors(e); return }
-    const count = form.recipient === 'all' ? tenants.length
-      : tenants.filter((t) => t.property === form.property).length
+    const recipients = form.recipient === 'all' ? tenants
+      : tenants.filter((t) => t.property === form.property)
+    const count = recipients.length
+    // Notify each recipient in their portal
+    for (const t of recipients) {
+      notifyUser(t.id, { type: 'announcement', title: form.subject, body: form.message, link: '/tenant' })
+    }
     showToast({ type: 'success', title: `Announcement sent to ${count} tenant${count !== 1 ? 's' : ''}` })
     onSent?.(form.subject, count)
     onClose()
@@ -892,7 +998,7 @@ function AnnouncementModal({ tenants, properties, onClose, onSent }: Announcemen
         <div className="p-6 space-y-4">
           <div className="bg-gray-50 rounded-xl p-3">
             <p className="text-xs text-gray-500">From</p>
-            <p className="text-sm font-semibold text-gray-900">BMP Central</p>
+            <p className="text-sm font-semibold text-gray-900">{companyName}</p>
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1">Recipients</label>
@@ -1109,14 +1215,14 @@ const EMOJI_LIST = [
 function MessagesPanel({ threads, setThreads, selectedThreadId, setSelectedThreadId, onNewThread, onViewTenantProfile }: MessagesPanelProps) {
   const { user } = useAuth()
   const { demoMode } = useDemoMode()
-  const { data: threadMessages } = useMessages(selectedThreadId)
+  const { data: threadMessages, setData: setThreadMessages } = useMessages(selectedThreadId)
   const [compose, setCompose] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editText, setEditText] = useState('')
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null)
   const [editedPopoverId, setEditedPopoverId] = useState<string | null>(null)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
-  const [attachments, setAttachments] = useState<{ name: string; size: string }[]>([])
+  const [attachments, setAttachments] = useState<{ name: string; size: string; file: File; previewUrl: string | null }[]>([])
   const [threadSearch, setThreadSearch] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -1157,24 +1263,70 @@ function MessagesPanel({ threads, setThreads, selectedThreadId, setSelectedThrea
 
   async function sendMessage() {
     if ((!compose.trim() && attachments.length === 0) || !selectedThreadId || !user) return
-    const text = [
-      compose.trim(),
-      ...attachments.map(a => `📎 ${a.name} (${a.size})`),
-    ].filter(Boolean).join('\n')
+    const textParts = [compose.trim()]
+    for (const att of attachments) {
+      const ext = att.name.split('.').pop() ?? 'bin'
+      const path = `${user.id}/${crypto.randomUUID()}.${ext}`
+      const { data: uploaded, error: upErr } = await supabase.storage
+        .from('message-attachments')
+        .upload(path, att.file, { contentType: att.file.type, upsert: false })
+      if (!upErr && uploaded) {
+        const { data: { publicUrl } } = supabase.storage.from('message-attachments').getPublicUrl(uploaded.path)
+        textParts.push(publicUrl)
+      } else {
+        textParts.push(`📎 ${att.name} (${att.size})`)
+      }
+    }
+    const text = textParts.filter(Boolean).join('\n')
+    const bodyText = compose.trim()
     setCompose('')
     setAttachments([])
-    const { error } = await supabase.from('messages').insert({
+
+    // Optimistic update — show message immediately
+    const optimisticId = `opt-${Date.now()}`
+    const optimistic: ChatMessage = {
+      id: optimisticId,
+      threadId: selectedThreadId,
+      senderId: 'pm',
+      senderName: 'Property Manager',
+      text,
+      timestamp: '',
+      sentAt: Date.now(),
+      edited: false,
+      unsent: false,
+    }
+    setThreadMessages(prev => [...prev, optimistic])
+
+    const { data: inserted, error } = await supabase.from('messages').insert({
       pm_id: user.id,
       tenant_id: selectedThreadId,
       sender: 'pm',
       body: text,
       read: false,
+    }).select().single()
+
+    if (error) {
+      // Roll back optimistic message
+      setThreadMessages(prev => prev.filter(m => m.id !== optimisticId))
+      showToast({ type: 'error', title: 'Failed to send message' })
+      return
+    }
+
+    // Replace optimistic row with real DB id so edits/deletes work
+    if (inserted) {
+      setThreadMessages(prev => prev.map(m => m.id === optimisticId ? { ...m, id: inserted.id as string } : m))
+    }
+
+    notifyUser(selectedThreadId, {
+      type: 'message',
+      title: 'New message from your property manager',
+      body: bodyText || 'Sent an attachment',
+      link: '/tenant',
     })
-    if (error) { showToast({ type: 'error', title: 'Failed to send message' }); return }
     setThreads((prev) =>
       prev.map((t) =>
         t.id === selectedThreadId
-          ? { ...t, lastMessage: text.slice(0, 60), lastTime: 'Just now', unread: 0 }
+          ? { ...t, lastMessage: text.split('\n').map(l => { try { const u = new URL(l.trim()); if (/\.(jpg|jpeg|png|gif|webp)(\?|$)/i.test(u.pathname)) return '📷 Image' } catch {} return l }).filter(Boolean).join(' · ').slice(0, 60), lastTime: 'Just now', unread: 0 }
           : t
       )
     )
@@ -1199,20 +1351,11 @@ function MessagesPanel({ threads, setThreads, selectedThreadId, setSelectedThrea
     const items = files.map(f => ({
       name: f.name,
       size: f.size < 1024 * 1024 ? `${Math.round(f.size / 1024)} KB` : `${(f.size / 1024 / 1024).toFixed(1)} MB`,
+      file: f,
+      previewUrl: f.type.startsWith('image/') ? URL.createObjectURL(f) : null,
     }))
     setAttachments(prev => [...prev, ...items])
     e.target.value = ''
-  }
-
-  function startEdit(msg: ChatMessage) {
-    setEditingId(msg.id)
-    setEditText(msg.text)
-    setMenuOpenId(null)
-  }
-
-  async function saveEdit(id: string) {
-    await supabase.from('messages').update({ body: editText }).eq('id', id)
-    setEditingId(null)
   }
 
   async function unsendMessage(id: string) {
@@ -1322,30 +1465,6 @@ function MessagesPanel({ threads, setThreads, selectedThreadId, setSelectedThrea
                 )
               }
 
-              if (editingId === msg.id) {
-                return (
-                  <div key={msg.id} className={`flex ${isPm ? 'justify-end' : 'justify-start'} ${showSenderBreak ? 'mt-3' : ''}`}>
-                    <div className="max-w-[72%] space-y-2">
-                      <textarea
-                        rows={3}
-                        className="w-full px-3 py-2 text-sm border border-blue-400 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none bg-white shadow-sm"
-                        value={editText}
-                        onChange={(e) => setEditText(e.target.value)}
-                        autoFocus
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveEdit(msg.id) }
-                          if (e.key === 'Escape') setEditingId(null)
-                        }}
-                      />
-                      <div className="flex gap-2">
-                        <button onClick={() => saveEdit(msg.id)} className="text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded-full font-semibold">Save</button>
-                        <button onClick={() => setEditingId(null)} className="text-xs text-gray-500 hover:text-gray-700 px-3 py-1 rounded-full border border-gray-200 bg-white">Cancel</button>
-                      </div>
-                    </div>
-                  </div>
-                )
-              }
-
               return (
                 <div key={msg.id} className={`flex items-end gap-2 group ${isPm ? 'justify-end' : 'justify-start'} ${showSenderBreak ? 'mt-3' : 'mt-0.5'}`}>
                   {!isPm && (
@@ -1362,23 +1481,15 @@ function MessagesPanel({ threads, setThreads, selectedThreadId, setSelectedThrea
                             : `bg-white text-gray-900 border border-gray-200 shadow-sm ${isLastInGroup ? 'rounded-[20px] rounded-bl-[5px]' : 'rounded-[20px]'}`
                         }`}
                       >
-                        {msg.text}
-                        {msg.edited && (
-                          <span className="relative">
-                            <button
-                              onClick={() => setEditedPopoverId(editedPopoverId === msg.id ? null : msg.id)}
-                              className={`text-xs italic ml-1.5 ${isPm ? 'text-blue-200' : 'text-gray-400'} hover:underline`}
-                            >
-                              edited
-                            </button>
-                            {editedPopoverId === msg.id && (
-                              <div className="absolute bottom-full left-0 mb-2 bg-gray-900 rounded-xl px-4 py-3 w-[220px] z-20 shadow-xl">
-                                <p className="text-xs font-semibold text-gray-400 mb-1 uppercase tracking-wider">Original</p>
-                                <p className="text-sm text-white">{msg.originalText}</p>
-                              </div>
-                            )}
-                          </span>
-                        )}
+                        {msg.text.split('\n').map((line, i) => {
+                          try {
+                            const url = new URL(line.trim())
+                            if (/\.(jpg|jpeg|png|gif|webp)(\?|$)/i.test(url.pathname)) {
+                              return <img key={i} src={line.trim()} className="max-w-[260px] rounded-xl mt-1 block" alt="attachment" />
+                            }
+                          } catch { /* not a URL */ }
+                          return <span key={i}>{line}{i < msg.text.split('\n').length - 1 && '\n'}</span>
+                        })}
                       </div>
                       {/* Hover actions */}
                       <div className={`absolute top-1/2 -translate-y-1/2 ${isPm ? '-left-9' : '-right-9'} hidden group-hover:flex`}>
@@ -1392,14 +1503,9 @@ function MessagesPanel({ threads, setThreads, selectedThreadId, setSelectedThrea
                           {menuOpenId === msg.id && (
                             <div className={`absolute ${isPm ? 'right-8' : 'left-8'} top-0 bg-white border border-gray-200 rounded-xl shadow-lg py-1 z-20 w-28`}>
                               {isPm ? (
-                                <>
-                                  <button onClick={() => startEdit(msg)} className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-2">
-                                    <Edit2 className="w-3.5 h-3.5" /> Edit
-                                  </button>
-                                  <button onClick={() => unsendMessage(msg.id)} className="w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50 flex items-center gap-2">
-                                    <X className="w-3.5 h-3.5" /> Unsend
-                                  </button>
-                                </>
+                                <button onClick={() => unsendMessage(msg.id)} className="w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50 flex items-center gap-2">
+                                  <X className="w-3.5 h-3.5" /> Unsend
+                                </button>
                               ) : (
                                 <button onClick={() => { setCompose(`@${msg.senderName} `); setMenuOpenId(null); composeRef.current?.focus() }} className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-2">
                                   Reply
@@ -1425,13 +1531,27 @@ function MessagesPanel({ threads, setThreads, selectedThreadId, setSelectedThrea
           {attachments.length > 0 && (
             <div className="px-4 py-2 border-t border-gray-100 bg-white flex gap-2 flex-wrap">
               {attachments.map((a, i) => (
-                <div key={i} className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-2.5 py-1.5 text-xs text-blue-700 font-medium">
-                  <Paperclip className="w-3 h-3" />
-                  <span className="max-w-[140px] truncate">{a.name}</span>
-                  <span className="text-blue-400">{a.size}</span>
-                  <button onClick={() => setAttachments(prev => prev.filter((_, j) => j !== i))} className="text-blue-400 hover:text-blue-700 ml-0.5">
-                    <X className="w-3 h-3" />
-                  </button>
+                <div key={i} className="relative group/att">
+                  {a.previewUrl ? (
+                    <div className="relative">
+                      <img src={a.previewUrl} className="w-16 h-16 rounded-xl object-cover border border-gray-200" alt={a.name} />
+                      <button
+                        onClick={() => setAttachments(prev => prev.filter((_, j) => j !== i))}
+                        className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-gray-800 text-white rounded-full flex items-center justify-center opacity-0 group-hover/att:opacity-100 transition-opacity"
+                      >
+                        <X className="w-2.5 h-2.5" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-2.5 py-1.5 text-xs text-blue-700 font-medium">
+                      <Paperclip className="w-3 h-3" />
+                      <span className="max-w-[140px] truncate">{a.name}</span>
+                      <span className="text-blue-400">{a.size}</span>
+                      <button onClick={() => setAttachments(prev => prev.filter((_, j) => j !== i))} className="text-blue-400 hover:text-blue-700 ml-0.5">
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -1538,8 +1658,10 @@ interface SettingsPanelProps {
 function SettingsPanel({ profileName, setProfileName, profilePhoto, setProfilePhoto }: SettingsPanelProps) {
   const { demoMode, setDemoMode } = useDemoMode()
   const { user } = useAuth()
-  const [section, setSection] = useState<'account' | 'security' | 'notifications' | 'preferences'>('account')
+  const branding = useBranding()
+  const [section, setSection] = useState<'account' | 'branding' | 'security' | 'notifications' | 'preferences'>('account')
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const logoInputRef = useRef<HTMLInputElement>(null)
 
   // ─── Account ────────────────────────────────────────────────────────────────
   const [profileLoading, setProfileLoading] = useState(true)
@@ -1587,8 +1709,33 @@ function SettingsPanel({ profileName, setProfileName, profilePhoto, setProfilePh
   const [prefDarkMode, setPrefDarkMode] = useState(false)
   const [prefsSaving, setPrefsSaving] = useState(false)
 
+  // ─── Branding ─────────────────────────────────────────────────────────────────
+  const PRESET_COLORS = ['#2563EB', '#4F46E5', '#7C3AED', '#0891B2', '#059669', '#DB2777', '#E11D48', '#EA580C', '#0F172A']
+  const [brandName, setBrandName] = useState(branding.companyName)
+  const [brandTagline, setBrandTagline] = useState(branding.tagline)
+  const [brandColor, setBrandColor] = useState(branding.primaryColor)
+  const [brandLogoUrl, setBrandLogoUrl] = useState<string | null>(branding.logoUrl)
+  const [brandSaving, setBrandSaving] = useState(false)
+  const [brandLogoUploading, setBrandLogoUploading] = useState(false)
+
+  // Keep the editor in sync once the brand context finishes loading
+  useEffect(() => {
+    setBrandName(branding.companyName)
+    setBrandTagline(branding.tagline)
+    setBrandColor(branding.primaryColor)
+    setBrandLogoUrl(branding.logoUrl)
+  }, [branding.companyName, branding.tagline, branding.primaryColor, branding.logoUrl])
+
+  // Live-preview the accent while editing; restore the saved accent on unmount
+  useEffect(() => {
+    branding.previewColor(brandColor)
+    return () => branding.previewColor(null)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [brandColor])
+
   const sections = [
     { id: 'account', label: 'Account' },
+    { id: 'branding', label: 'Branding' },
     { id: 'security', label: 'Security' },
     { id: 'notifications', label: 'Notifications' },
     { id: 'preferences', label: 'Preferences' },
@@ -1662,6 +1809,41 @@ function SettingsPanel({ profileName, setProfileName, profilePhoto, setProfilePh
     e.target.value = ''
   }
 
+  async function handleBrandLogoChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (!user) { showToast({ type: 'error', title: 'Sign in to upload a logo' }); return }
+    setBrandLogoUploading(true)
+    const ext = file.name.split('.').pop() ?? 'png'
+    const path = `${user.id}/logo-${Date.now()}.${ext}`
+    const { error: upErr } = await supabase.storage.from('branding').upload(path, file, { upsert: true })
+    if (upErr) { showToast({ type: 'error', title: 'Logo upload failed', message: upErr.message }); setBrandLogoUploading(false); return }
+    const { data } = supabase.storage.from('branding').getPublicUrl(path)
+    setBrandLogoUrl(data.publicUrl)
+    setBrandLogoUploading(false)
+    showToast({ type: 'success', title: 'Logo uploaded — remember to Save' })
+    e.target.value = ''
+  }
+
+  async function handleSaveBranding() {
+    if (!user) { showToast({ type: 'error', title: 'Sign in to save branding' }); return }
+    setBrandSaving(true)
+    const { error } = await supabase.from('branding').upsert({
+      pm_id: user.id,
+      company_name: brandName.trim() || 'BMP Central',
+      tagline: brandTagline.trim() || null,
+      logo_url: brandLogoUrl,
+      primary_color: brandColor,
+      updated_at: new Date().toISOString(),
+    })
+    if (error) showToast({ type: 'error', title: 'Save failed', message: error.message })
+    else {
+      await branding.refresh()
+      showToast({ type: 'success', title: 'Branding saved' })
+    }
+    setBrandSaving(false)
+  }
+
   async function handleChangePassword() {
     if (!newPw) { setPwError('Enter a new password.'); return }
     if (newPw.length < 8) { setPwError('Password must be at least 8 characters.'); return }
@@ -1682,7 +1864,7 @@ function SettingsPanel({ profileName, setProfileName, profilePhoto, setProfilePh
 
   async function handleEnable2FA() {
     setMfaLoading(true); setMfaError(null)
-    const { data, error } = await supabase.auth.mfa.enroll({ factorType: 'totp', issuer: 'BMP Central', friendlyName: 'Authenticator App' })
+    const { data, error } = await supabase.auth.mfa.enroll({ factorType: 'totp', issuer: branding.companyName, friendlyName: 'Authenticator App' })
     if (error || !data) { setMfaError(error?.message ?? 'Failed to start setup'); setMfaLoading(false); return }
     setMfaFactorId(data.id)
     setMfaQr(data.totp.qr_code)
@@ -1813,6 +1995,100 @@ function SettingsPanel({ profileName, setProfileName, profilePhoto, setProfilePh
                   {profileSaving ? 'Saving…' : 'Save Changes'}
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Branding ── */}
+        {section === 'branding' && (
+          <div className="max-w-2xl space-y-6">
+            <div>
+              <h3 className="text-base font-bold text-gray-900">Custom Branding</h3>
+              <p className="text-sm text-gray-500 mt-0.5">White-label the tenant, owner, and admin portals with your company identity. Changes apply everywhere.</p>
+            </div>
+
+            {/* Live preview */}
+            <div className="rounded-2xl border border-gray-200 overflow-hidden">
+              <div className="px-5 py-4 flex items-center gap-3" style={{ background: 'linear-gradient(135deg, #0F172A 0%, #1E293B 100%)' }}>
+                {brandLogoUrl
+                  ? <img src={brandLogoUrl} alt="logo" className="w-9 h-9 rounded-xl object-cover shadow-lg" />
+                  : <div className="w-9 h-9 rounded-xl flex items-center justify-center shadow-lg" style={{ background: brandColor }}><Building2 className="w-4.5 h-4.5 text-white" /></div>}
+                <div>
+                  <p className="text-white font-bold text-sm">{brandName || 'Company Name'}</p>
+                  <p className="text-slate-400 text-[11px]">{brandTagline || 'Tagline'}</p>
+                </div>
+                <span className="ml-auto px-3 py-1.5 rounded-lg text-white text-xs font-semibold" style={{ background: brandColor }}>Primary button</span>
+              </div>
+              <div className="px-5 py-2 bg-gray-50 text-[11px] text-gray-400 font-medium">Live preview</div>
+            </div>
+
+            {/* Company name + tagline */}
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Company Name</label>
+                <input value={brandName} onChange={e => setBrandName(e.target.value)} placeholder="BMP Central" className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Tagline</label>
+                <input value={brandTagline} onChange={e => setBrandTagline(e.target.value)} placeholder="Property Management" className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+            </div>
+
+            {/* Logo */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-2">Logo</label>
+              <div className="flex items-center gap-4">
+                <div className="w-16 h-16 rounded-2xl border border-gray-200 bg-gray-50 flex items-center justify-center overflow-hidden shrink-0">
+                  {brandLogoUrl
+                    ? <img src={brandLogoUrl} alt="logo" className="w-full h-full object-cover" />
+                    : <Building2 className="w-7 h-7 text-gray-300" />}
+                </div>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => logoInputRef.current?.click()} disabled={brandLogoUploading} className="px-3 py-2 text-sm font-semibold text-blue-600 border border-blue-200 rounded-xl hover:bg-blue-50 transition-colors disabled:opacity-60">
+                    {brandLogoUploading ? 'Uploading…' : brandLogoUrl ? 'Replace logo' : 'Upload logo'}
+                  </button>
+                  {brandLogoUrl && (
+                    <button onClick={() => setBrandLogoUrl(null)} className="px-3 py-2 text-sm font-semibold text-gray-500 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors">
+                      Remove
+                    </button>
+                  )}
+                  <input ref={logoInputRef} type="file" accept="image/*" className="hidden" onChange={handleBrandLogoChange} />
+                </div>
+              </div>
+              <p className="text-xs text-gray-400 mt-2">Square PNG or SVG works best. Falls back to a default icon when empty.</p>
+            </div>
+
+            {/* Accent color */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-2">Accent Color</label>
+              <div className="flex flex-wrap items-center gap-2">
+                {PRESET_COLORS.map(c => (
+                  <button
+                    key={c}
+                    onClick={() => setBrandColor(c)}
+                    className={`w-9 h-9 rounded-xl transition-transform ${brandColor.toUpperCase() === c.toUpperCase() ? 'ring-2 ring-offset-2 ring-gray-900 scale-110' : 'hover:scale-105'}`}
+                    style={{ background: c }}
+                    title={c}
+                  />
+                ))}
+                <label className="flex items-center gap-2 ml-1 px-2 py-1.5 border border-gray-200 rounded-xl cursor-pointer hover:bg-gray-50">
+                  <input type="color" value={brandColor} onChange={e => setBrandColor(e.target.value)} className="w-6 h-6 rounded cursor-pointer border-0 bg-transparent p-0" />
+                  <span className="text-xs font-mono text-gray-600 uppercase">{brandColor}</span>
+                </label>
+              </div>
+              <p className="text-xs text-gray-400 mt-2">Recolors buttons, links, and highlights across all three portals.</p>
+            </div>
+
+            <div className="flex items-center gap-3 pt-2">
+              <button onClick={handleSaveBranding} disabled={brandSaving} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-semibold px-5 py-2.5 rounded-xl text-sm transition-colors">
+                <CheckCircle className="w-4 h-4" /> {brandSaving ? 'Saving…' : 'Save Branding'}
+              </button>
+              <button
+                onClick={() => { setBrandName('BMP Central'); setBrandTagline('Property Management'); setBrandColor('#2563EB'); setBrandLogoUrl(null) }}
+                className="text-sm font-semibold text-gray-500 hover:text-gray-700"
+              >
+                Reset to default
+              </button>
             </div>
           </div>
         )}
@@ -2065,6 +2341,41 @@ const DEFAULT_QUICK_ACTIONS = [
   { id: 'schedule', label: 'Schedule Inspection', icon: <CheckCircle className="w-4 h-4" /> },
 ]
 
+function PendingPaymentRow({ record, tenantName, onConfirm }: { record: RentRecord; tenantName: string; onConfirm: (id: string) => Promise<void> }) {
+  const [confirming, setConfirming] = useState(false)
+  async function handle() {
+    setConfirming(true)
+    await onConfirm(record.id)
+    setConfirming(false)
+  }
+  return (
+    <div className="flex items-center justify-between bg-white rounded-xl px-4 py-3 border border-amber-100">
+      <div className="flex items-center gap-3">
+        <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center text-amber-700 font-bold text-xs">
+          {tenantName.charAt(0).toUpperCase()}
+        </div>
+        <div>
+          <p className="text-sm font-semibold text-gray-900">{tenantName}</p>
+          <p className="text-xs text-gray-500">${record.amount.toLocaleString()} · {record.month}{record.method ? ` · ${record.method}` : ''}</p>
+        </div>
+      </div>
+      <button
+        onClick={handle}
+        disabled={confirming}
+        className="bg-green-600 hover:bg-green-700 disabled:opacity-60 text-white text-xs font-semibold px-4 py-1.5 rounded-lg transition-colors flex items-center gap-1.5"
+      >
+        {confirming ? (
+          <svg className="animate-spin w-3 h-3" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+          </svg>
+        ) : <CheckCircle className="w-3 h-3" />}
+        Confirm
+      </button>
+    </div>
+  )
+}
+
 interface DashboardPanelProps {
   setActivePanel: (panel: string) => void
   setAnalyticsSection: (section: string) => void
@@ -2077,12 +2388,13 @@ interface DashboardPanelProps {
   properties: Property[]
   rentRecords: RentRecord[]
   recentActivity: { id: string; type: string; text: string; time: string }[]
+  onConfirmPayment: (recordId: string) => Promise<void>
 }
 
 function DashboardPanel({
   setActivePanel, setAnalyticsSection, onShowInviteModal, onShowAddPropertyModal,
   onShowReportModal, onShowAnnouncementModal, onShowScheduleModal,
-  tenants, properties, rentRecords, recentActivity,
+  tenants, properties, rentRecords, recentActivity, onConfirmPayment,
 }: DashboardPanelProps) {
   const [editQuickActions, setEditQuickActions] = useState(false)
   const [hiddenActions, setHiddenActions] = useState<Set<string>>(() => {
@@ -2145,7 +2457,7 @@ function DashboardPanel({
   const totalRevenue = properties.reduce((s, p) => s + p.monthlyIncome, 0)
   const currentMonth = new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
   const collectedIds = new Set(rentRecords.filter(r => r.month === currentMonth && r.status !== 'pending').map(r => r.tenantId))
-  const activeTenants = tenants.filter(t => t.status !== 'notice')
+  const activeTenants = tenants.filter(t => t.status !== 'notice' && t.status !== 'past')
   const collectedCount = activeTenants.filter(t => collectedIds.has(t.id)).length
   const overdueCount = activeTenants.filter(t => !collectedIds.has(t.id)).length
 
@@ -2182,6 +2494,30 @@ function DashboardPanel({
           </button>
         ))}
       </div>
+
+      {/* Pending payment confirmations */}
+      {(() => {
+        const pending = rentRecords.filter(r => r.status === 'pending')
+        if (pending.length === 0) return null
+        return (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-7 h-7 bg-amber-100 rounded-lg flex items-center justify-center">
+                <DollarSign className="w-4 h-4 text-amber-600" />
+              </div>
+              <p className="font-semibold text-amber-900 text-sm">{pending.length} Payment{pending.length > 1 ? 's' : ''} Awaiting Confirmation</p>
+            </div>
+            <div className="space-y-2">
+              {pending.map(r => {
+                const t = tenants.find(x => x.id === r.tenantId)
+                return (
+                  <PendingPaymentRow key={r.id} record={r} tenantName={t?.name ?? 'Tenant'} onConfirm={onConfirmPayment} />
+                )
+              })}
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Two-column layout */}
       <div className="grid grid-cols-5 gap-5">
@@ -2356,13 +2692,59 @@ function TenantsPanel({ tenants, setTenants, rentRecords, threads, setThreads, s
   const [filterStatus, setFilterStatus] = useState('')
   const [sortBy, setSortBy] = useState<'name' | 'rent' | 'leaseEnd'>('name')
   const [tenantStatusDropdownId, setTenantStatusDropdownId] = useState<string | null>(null)
+  const [resendingInviteId, setResendingInviteId] = useState<string | null>(null)
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
 
-  const today = new Date('2026-06-11')
+  async function handleDeleteTenant(id: string) {
+    setDeletingId(id)
+    const { error } = await supabase.from('tenants').delete().eq('id', id)
+    if (error) {
+      showToast({ type: 'error', title: 'Failed to delete tenant', message: error.message })
+    } else {
+      setTenants(prev => prev.filter(t => t.id !== id))
+      showToast({ type: 'success', title: 'Tenant deleted' })
+    }
+    setDeletingId(null)
+    setConfirmDeleteId(null)
+  }
+
+  async function resendInvite(t: Tenant) {
+    setResendingInviteId(t.id)
+    const newToken = crypto.randomUUID()
+    const { error } = await supabase.from('tenants').update({ invite_token: newToken }).eq('id', t.id)
+    if (error) {
+      showToast({ type: 'error', title: 'Failed to resend invite', message: error.message })
+      setResendingInviteId(null)
+      return
+    }
+    const link = `${window.location.origin}/invite?token=${newToken}`
+    const htmlBody = `<!doctype html><html><body style="font-family:system-ui,sans-serif;background:#f3f4f6;padding:24px">
+      <div style="max-width:480px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;border:1px solid #e5e7eb">
+        <div style="background:#2563EB;padding:20px 24px"><h1 style="margin:0;color:#fff;font-size:16px">You've been invited to your tenant portal</h1></div>
+        <div style="padding:24px">
+          <p style="color:#374151;font-size:14px;line-height:1.6;margin:0 0 16px">Your property manager has set up an account for you. Click the button below to create your password and access your portal.</p>
+          <a href="${link}" style="display:inline-block;background:#2563EB;color:#fff;text-decoration:none;font-weight:600;font-size:14px;padding:10px 18px;border-radius:10px">Accept Invite &amp; Create Account</a>
+          <p style="color:#9CA3AF;font-size:12px;margin:16px 0 0">Or copy this link: ${link}</p>
+        </div>
+      </div>
+    </body></html>`
+    sendDirectEmail(t.email, 'You\'ve been invited to your tenant portal', htmlBody).catch(() => {})
+    showToast({
+      type: 'success',
+      title: 'Invite resent!',
+      message: link,
+    })
+    setResendingInviteId(null)
+  }
+
+  const today = new Date()
   const currentMonth = new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
 
-  // Auto-detect overdue: tenants with no payment record for current month
+  // Auto-detect overdue: active/late tenants with no payment record for current month
   const overdueIds = new Set(
     tenants
+      .filter(t => t.status !== 'invited' && t.status !== 'past' && t.status !== 'notice')
       .filter(t => !rentRecords.some(r => r.tenantId === t.id && r.month === currentMonth))
       .map(t => t.id)
   )
@@ -2397,14 +2779,20 @@ function TenantsPanel({ tenants, setTenants, rentRecords, threads, setThreads, s
   }, 0) / tenants.length
   const avgLeaseDays = Math.round(avgLeaseMs / 86400000)
 
-  const statusLabels: Record<string, string> = { current: 'Current', late: 'Late', notice: 'Notice' }
+  const statusLabels: Record<string, string> = { active: 'Active', late: 'Late', notice: 'Notice', past: 'Past', invited: 'Invited' }
   const statusColors: Record<string, string> = {
+    active: 'bg-green-100 text-green-700',
     current: 'bg-green-100 text-green-700',
     late: 'bg-red-100 text-red-700',
     notice: 'bg-amber-100 text-amber-700',
+    invited: 'bg-purple-100 text-purple-700',
   }
 
-  const statusBadge = (s: string, tenantId: string) => (
+  const statusBadge = (s: string, tenantId: string) => {
+    if (s === 'invited') {
+      return <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-purple-100 text-purple-700 flex items-center gap-1 w-fit">INVITED</span>
+    }
+    return (
     <div className="relative inline-block">
       <button
         onClick={(e) => { e.stopPropagation(); setTenantStatusDropdownId(tenantStatusDropdownId === tenantId ? null : tenantId) }}
@@ -2415,14 +2803,14 @@ function TenantsPanel({ tenants, setTenants, rentRecords, threads, setThreads, s
       </button>
       {tenantStatusDropdownId === tenantId && (
         <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg py-1 z-20 w-28 animate-fade-in">
-          {(['current', 'late', 'notice'] as const).map(st => (
+          {(['active', 'late', 'notice'] as const).map(st => (
             <button key={st} onClick={async () => {
               setTenants(prev => prev.map(t => t.id === tenantId ? { ...t, status: st } : t))
               showToast({ type: 'success', title: `Status updated to ${statusLabels[st]}` })
               setTenantStatusDropdownId(null)
               await supabase.from('tenants').update({ status: st }).eq('id', tenantId)
             }} className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-2">
-              <span className={`w-1.5 h-1.5 rounded-full ${st === 'current' ? 'bg-green-500' : st === 'late' ? 'bg-red-500' : 'bg-amber-500'}`} />
+              <span className={`w-1.5 h-1.5 rounded-full ${st === 'active' ? 'bg-green-500' : st === 'late' ? 'bg-red-500' : 'bg-amber-500'}`} />
               {statusLabels[st]}
             </button>
           ))}
@@ -2430,6 +2818,7 @@ function TenantsPanel({ tenants, setTenants, rentRecords, threads, setThreads, s
       )}
     </div>
   )
+  }
 
   function handleMessage(tenant: Tenant) {
     const existing = threads.find((th) => th.tenantId === tenant.id)
@@ -2529,9 +2918,11 @@ function TenantsPanel({ tenants, setTenants, rentRecords, threads, setThreads, s
         <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
           className="px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
           <option value="">All Statuses</option>
-          <option value="current">Current</option>
+          <option value="active">Active</option>
           <option value="late">Late</option>
           <option value="notice">Notice</option>
+          <option value="past">Past</option>
+          <option value="invited">Invited</option>
         </select>
         <select value={sortBy} onChange={e => setSortBy(e.target.value as typeof sortBy)}
           className="px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
@@ -2582,23 +2973,57 @@ function TenantsPanel({ tenants, setTenants, rentRecords, threads, setThreads, s
                   <td className="px-5 py-3 text-sm text-gray-600">{t.leaseEnd}</td>
                   <td className="px-5 py-3">{statusBadge(t.status, t.id)}</td>
                   <td className="px-5 py-3">
-                    {hasPaid
+                    {t.status === 'invited' ? <span className="text-xs text-gray-400">—</span>
+                      : hasPaid
                       ? <span className="flex items-center gap-1 text-xs font-semibold text-green-600"><CheckCircle className="w-3.5 h-3.5" /> Paid</span>
                       : <button onClick={() => onLogPayment(t.id)} className="text-xs font-semibold text-red-600 hover:text-red-700 flex items-center gap-1 border border-red-200 px-2 py-0.5 rounded-lg hover:bg-red-50"><CreditCard className="w-3 h-3" /> Log</button>
                     }
                   </td>
                   <td className="px-5 py-3">
-                    <div className="flex items-center gap-1">
-                      <button onClick={() => onEditTenant(t.id)} className="text-xs font-semibold text-gray-600 hover:text-gray-800 border border-gray-200 px-2 py-1 rounded-lg hover:bg-gray-50">
-                        Edit
-                      </button>
-                      <button onClick={() => onViewTenant(t.id)} className="text-xs font-semibold text-blue-600 hover:text-blue-700 border border-blue-100 px-2 py-1 rounded-lg hover:bg-blue-50">
-                        Profile
-                      </button>
-                      <button onClick={() => handleMessage(t)} className="text-xs font-semibold text-gray-500 hover:text-gray-700 p-1">
-                        <MessageSquare className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
+                    {confirmDeleteId === t.id ? (
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs text-gray-600 font-medium">Delete?</span>
+                        <button
+                          onClick={() => handleDeleteTenant(t.id)}
+                          disabled={deletingId === t.id}
+                          className="text-xs font-semibold text-white bg-red-600 hover:bg-red-700 disabled:opacity-60 px-2 py-1 rounded-lg flex items-center gap-1"
+                        >
+                          {deletingId === t.id && <span className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin" />}
+                          Yes
+                        </button>
+                        <button onClick={() => setConfirmDeleteId(null)} className="text-xs font-semibold text-gray-600 border border-gray-200 px-2 py-1 rounded-lg hover:bg-gray-50">
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1">
+                        <button onClick={() => onEditTenant(t.id)} className="text-xs font-semibold text-gray-600 hover:text-gray-800 border border-gray-200 px-2 py-1 rounded-lg hover:bg-gray-50">
+                          Edit
+                        </button>
+                        {t.status === 'invited' ? (
+                          <button
+                            onClick={() => resendInvite(t)}
+                            disabled={resendingInviteId === t.id}
+                            className="text-xs font-semibold text-purple-600 hover:text-purple-700 border border-purple-200 px-2 py-1 rounded-lg hover:bg-purple-50 disabled:opacity-50 flex items-center gap-1"
+                          >
+                            {resendingInviteId === t.id
+                              ? <span className="w-3 h-3 border border-purple-400 border-t-transparent rounded-full animate-spin" />
+                              : <Send className="w-3 h-3" />}
+                            Resend
+                          </button>
+                        ) : (
+                          <button onClick={() => onViewTenant(t.id)} className="text-xs font-semibold text-blue-600 hover:text-blue-700 border border-blue-100 px-2 py-1 rounded-lg hover:bg-blue-50">
+                            Profile
+                          </button>
+                        )}
+                        <button onClick={() => handleMessage(t)} className="text-xs font-semibold text-gray-500 hover:text-gray-700 p-1">
+                          <MessageSquare className="w-3.5 h-3.5" />
+                        </button>
+                        <button onClick={() => setConfirmDeleteId(t.id)} className="text-xs text-gray-400 hover:text-red-500 p-1 transition-colors">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
                   </td>
                 </tr>
               )
@@ -2622,9 +3047,10 @@ interface MaintenancePanelProps {
   focusedTicketId?: string | null
   onClearFocus?: () => void
   addActivity?: (entry: { type: 'payment' | 'ticket' | 'tenant' | 'announcement' | 'lease'; text: string }) => void
+  onViewTenant?: (tenantId: string) => void
 }
 
-function MaintenancePanel({ tickets, setTickets, onShowNewTicketModal, focusedTicketId, onClearFocus, addActivity }: MaintenancePanelProps) {
+function MaintenancePanel({ tickets, setTickets, onShowNewTicketModal, focusedTicketId, onClearFocus, addActivity, onViewTenant }: MaintenancePanelProps) {
   const [filterStatus, setFilterStatus] = useState<'all' | 'open' | 'in_progress' | 'resolved'>('all')
   const [filterProperty, setFilterProperty] = useState('')
   const [filterPriority, setFilterPriority] = useState('')
@@ -2677,7 +3103,10 @@ function MaintenancePanel({ tickets, setTickets, onShowNewTicketModal, focusedTi
                 const tk = tickets.find(t => t.id === ticketId)
                 setTickets(prev => prev.map(t => t.id === ticketId ? { ...t, status: st } : t))
                 showToast({ type: 'success', title: `Status → ${labels[st]}` })
-                if (tk) addActivity?.({ type: 'ticket', text: `${tk.tenantName} · ${tk.title} → ${labels[st]}` })
+                if (tk) {
+                  addActivity?.({ type: 'ticket', text: `${tk.tenantName} · ${tk.title} → ${labels[st]}` })
+                  notifyUser(tk.tenantId, { type: 'maintenance', title: `Maintenance request ${labels[st]}`, body: `"${tk.title}" is now ${labels[st]}.`, link: '/tenant' })
+                }
                 await supabase.from('maintenance_requests').update({ status: st, updated_at: new Date().toISOString() }).eq('id', ticketId)
                 setStatusDropdownId(null)
               }} className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-2">
@@ -2695,7 +3124,10 @@ function MaintenancePanel({ tickets, setTickets, onShowNewTicketModal, focusedTi
     const tk = tickets.find(t => t.id === id)
     setTickets((prev) => prev.map((t) => (t.id === id ? { ...t, status: 'resolved' as const } : t)))
     showToast({ type: 'success', title: 'Ticket marked as resolved' })
-    if (tk) addActivity?.({ type: 'ticket', text: `${tk.tenantName} · ${tk.title} → Resolved` })
+    if (tk) {
+      addActivity?.({ type: 'ticket', text: `${tk.tenantName} · ${tk.title} → Resolved` })
+      notifyUser(tk.tenantId, { type: 'maintenance', title: 'Maintenance request resolved', body: `"${tk.title}" has been marked resolved.`, link: '/tenant' })
+    }
     await supabase.from('maintenance_requests').update({ status: 'resolved', updated_at: new Date().toISOString() }).eq('id', id)
   }
 
@@ -2884,7 +3316,10 @@ function MaintenancePanel({ tickets, setTickets, onShowNewTicketModal, focusedTi
                       <p className="text-xs text-gray-400">{t.category}</p>
                     </td>
                     <td className="px-5 py-3">
-                      <p className="text-sm text-gray-700">{t.tenantName}</p>
+                      {onViewTenant && t.tenantId
+                        ? <button onClick={(e) => { e.stopPropagation(); onViewTenant(t.tenantId) }} className="text-sm font-medium text-blue-600 hover:underline text-left">{t.tenantName}</button>
+                        : <p className="text-sm text-gray-700">{t.tenantName}</p>
+                      }
                       <p className="text-xs text-gray-400">{t.unit} · {t.property}</p>
                     </td>
                     <td className="px-5 py-3">{priorityBadge(t.priority)}</td>
@@ -2964,9 +3399,10 @@ interface PropertiesPanelProps {
   onManageProperty: (id: string) => void
   setActivePanel: (panel: string) => void
   onViewTicket: (ticketId: string) => void
+  onViewTenant: (tenantId: string) => void
 }
 
-function PropertiesPanel({ properties, tenants, tickets, onShowAddPropertyModal, onManageProperty, onViewTicket }: PropertiesPanelProps) {
+function PropertiesPanel({ properties, tenants, tickets, onShowAddPropertyModal, onManageProperty, onViewTicket, onViewTenant }: PropertiesPanelProps) {
   const [expandedPropertyId, setExpandedPropertyId] = useState<string | null>(null)
   const [viewTicketsProperty, setViewTicketsProperty] = useState<Property | null>(null)
 
@@ -3048,7 +3484,7 @@ function PropertiesPanel({ properties, tenants, tickets, onShowAddPropertyModal,
                 <div className="mb-3 space-y-1 animate-fade-in">
                   {propTenants.map(t => (
                     <div key={t.id} className="flex items-center justify-between text-xs py-1 border-b border-gray-50">
-                      <span className="font-medium text-gray-800">{t.name}</span>
+                      <button onClick={() => onViewTenant(t.id)} className="font-medium text-blue-600 hover:underline text-left">{t.name}</button>
                       <span className="text-gray-500">Unit {t.unit}</span>
                       <span className="font-semibold text-gray-700">${t.rent.toLocaleString()}/mo</span>
                     </div>
@@ -3423,7 +3859,7 @@ function EditTenantModal({ tenant, properties, onClose, onSave }: { tenant: Tena
             <label className="block text-xs font-semibold text-gray-600 mb-1">Status</label>
             <select value={form.status} onChange={e => setForm({...form, status: e.target.value as Tenant['status']})}
               className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
-              {(['current','late','notice'] as const).map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase()+s.slice(1)}</option>)}
+              {(['active','late','notice','past'] as const).map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase()+s.slice(1)}</option>)}
             </select>
           </div>
           <div className="flex gap-3 pt-2">
@@ -3439,25 +3875,19 @@ function EditTenantModal({ tenant, properties, onClose, onSave }: { tenant: Tena
 
 // ─── Tenant Profile Modal ─────────────────────────────────────────────────────
 
-function TenantProfileModal({ tenant, tickets, onClose, onMessage }: { tenant: Tenant; tickets: MaintenanceTicket[]; onClose: () => void; onMessage: (id: string) => void }) {
+function TenantProfileModal({ tenant, tickets, onClose, onMessage, onSavePayment }: { tenant: Tenant; tickets: MaintenanceTicket[]; onClose: () => void; onMessage: (id: string) => void; onSavePayment?: (record: RentRecord) => void }) {
   const [tab, setTab] = useState<'overview'|'payments'|'maintenance'|'documents'>('overview')
+  const [showLogPayment, setShowLogPayment] = useState(false)
+  const { data: rentRecords, loading: paymentsLoading, refetch: refetchPayments } = useRentRecords(tenant.id)
+  const { data: docs, loading: docsLoading } = useDocuments(tenant.id)
   const tenantTickets = tickets.filter(t => t.tenantId === tenant.id)
 
-  const today = new Date('2026-06-10')
+  const now = new Date()
   let leaseEndDate: Date | null = null
   try { leaseEndDate = new Date(tenant.leaseEnd) } catch { leaseEndDate = null }
-  const daysRemaining = leaseEndDate ? Math.round((leaseEndDate.getTime() - today.getTime()) / 86400000) : null
+  const daysRemaining = leaseEndDate ? Math.round((leaseEndDate.getTime() - now.getTime()) / 86400000) : null
   const totalLeaseDays = 365
   const leaseProgress = daysRemaining !== null ? Math.max(0, Math.min(100, Math.round(((totalLeaseDays - daysRemaining) / totalLeaseDays) * 100))) : 0
-
-  const paymentHistory = [
-    { month: 'Jun 2026', amount: tenant.rent, date: 'Jun 1, 2026', method: 'ACH', status: 'paid' },
-    { month: 'May 2026', amount: tenant.rent, date: 'May 1, 2026', method: 'ACH', status: 'paid' },
-    { month: 'Apr 2026', amount: tenant.rent, date: 'Apr 1, 2026', method: 'ACH', status: 'paid' },
-    { month: 'Mar 2026', amount: tenant.rent, date: 'Mar 1, 2026', method: 'ACH', status: 'paid' },
-    { month: 'Feb 2026', amount: tenant.rent, date: 'Feb 1, 2026', method: 'ACH', status: 'paid' },
-    { month: 'Jan 2026', amount: tenant.rent, date: 'Jan 2, 2026', method: 'ACH', status: 'paid' },
-  ]
 
   return (
     <ModalBackdrop onClose={onClose}>
@@ -3491,7 +3921,6 @@ function TenantProfileModal({ tenant, tickets, onClose, onMessage }: { tenant: T
         <div className="p-6">
           {tab === 'overview' && (
             <div className="space-y-4">
-              {/* Lease card */}
               <div className="bg-gray-50 rounded-xl p-4">
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Lease</p>
                 <div className="grid grid-cols-3 gap-4 mb-3">
@@ -3525,27 +3954,41 @@ function TenantProfileModal({ tenant, tickets, onClose, onMessage }: { tenant: T
             </div>
           )}
           {tab === 'payments' && (
-            <div>
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-100">
-                    {['Month','Amount','Date Paid','Method','Status'].map(h => (
-                      <th key={h} className="text-left py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {paymentHistory.map((p, i) => (
-                    <tr key={i} className="border-b border-gray-50">
-                      <td className="py-2.5 text-gray-700">{p.month}</td>
-                      <td className="py-2.5 font-semibold text-gray-900">${p.amount.toLocaleString()}</td>
-                      <td className="py-2.5 text-gray-600">{p.date}</td>
-                      <td className="py-2.5 text-gray-600">{p.method}</td>
-                      <td className="py-2.5"><span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-green-100 text-green-700">Paid</span></td>
+            <div className="space-y-4">
+              <div className="flex justify-end">
+                <button onClick={() => setShowLogPayment(true)} className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2 rounded-xl flex items-center gap-2 transition-colors">
+                  <CreditCard className="w-4 h-4" /> Log Payment
+                </button>
+              </div>
+              {paymentsLoading ? (
+                <p className="text-sm text-gray-400 text-center py-8">Loading payments…</p>
+              ) : rentRecords.length === 0 ? (
+                <p className="text-sm text-gray-400 text-center py-8">No payments recorded yet.</p>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-100">
+                      {['Month','Amount','Date Paid','Status'].map(h => (
+                        <th key={h} className="text-left py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">{h}</th>
+                      ))}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {rentRecords.map(p => (
+                      <tr key={p.id} className="border-b border-gray-50">
+                        <td className="py-2.5 text-gray-700">{p.month}</td>
+                        <td className="py-2.5 font-semibold text-gray-900">${p.amount.toLocaleString()}</td>
+                        <td className="py-2.5 text-gray-600">{p.datePaid ?? '—'}</td>
+                        <td className="py-2.5">
+                          <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${p.status === 'paid' ? 'bg-green-100 text-green-700' : p.status === 'late' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'}`}>
+                            {p.status.charAt(0).toUpperCase()+p.status.slice(1)}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
             </div>
           )}
           {tab === 'maintenance' && (
@@ -3556,7 +3999,7 @@ function TenantProfileModal({ tenant, tickets, onClose, onMessage }: { tenant: T
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-gray-100">
-                      {['ID','Issue','Category','Status','Date'].map(h => (
+                      {['Issue','Category','Status','Date'].map(h => (
                         <th key={h} className="text-left py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">{h}</th>
                       ))}
                     </tr>
@@ -3564,7 +4007,6 @@ function TenantProfileModal({ tenant, tickets, onClose, onMessage }: { tenant: T
                   <tbody>
                     {tenantTickets.map(t => (
                       <tr key={t.id} className="border-b border-gray-50">
-                        <td className="py-2.5 font-mono text-xs text-gray-500">{t.id}</td>
                         <td className="py-2.5 font-medium text-gray-900">{t.title}</td>
                         <td className="py-2.5 text-gray-600">{t.category}</td>
                         <td className="py-2.5">
@@ -3582,21 +4024,29 @@ function TenantProfileModal({ tenant, tickets, onClose, onMessage }: { tenant: T
           )}
           {tab === 'documents' && (
             <div className="space-y-3">
-              {[
-                { name: `Lease Agreement — ${tenant.name}`, type: 'Lease', date: tenant.moveIn },
-                { name: `Move-In Checklist — ${tenant.name}`, type: 'Checklist', date: tenant.moveIn },
-              ].map(d => (
-                <div key={d.name} className="flex items-center justify-between p-3 border border-gray-200 rounded-xl hover:bg-gray-50">
-                  <div className="flex items-center gap-3">
-                    <FileText className="w-5 h-5 text-gray-400" />
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">{d.name}</p>
-                      <p className="text-xs text-gray-400">{d.type} · {d.date}</p>
+              {docsLoading ? (
+                <p className="text-sm text-gray-400 text-center py-8">Loading documents…</p>
+              ) : docs.length === 0 ? (
+                <p className="text-sm text-gray-400 text-center py-8">No documents uploaded for this tenant.</p>
+              ) : (
+                docs.map(d => (
+                  <div key={d.id} className="flex items-center justify-between p-3 border border-gray-200 rounded-xl hover:bg-gray-50">
+                    <div className="flex items-center gap-3">
+                      <FileText className="w-5 h-5 text-gray-400" />
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">{d.name}</p>
+                        <p className="text-xs text-gray-400">{d.type} · {d.date} · {d.size}</p>
+                      </div>
                     </div>
+                    {d.storagePath && (
+                      <button onClick={async () => {
+                        const { data } = await supabase.storage.from('documents').createSignedUrl(d.storagePath!, 60)
+                        if (data?.signedUrl) window.open(data.signedUrl, '_blank')
+                      }} className="text-xs font-semibold text-blue-600 hover:text-blue-700">Download</button>
+                    )}
                   </div>
-                  <button onClick={() => showToast({ type: 'info', title: `Opening ${d.name}` })} className="text-xs font-semibold text-blue-600 hover:text-blue-700">View</button>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           )}
         </div>
@@ -3611,6 +4061,18 @@ function TenantProfileModal({ tenant, tickets, onClose, onMessage }: { tenant: T
           </button>
         </div>
       </div>
+
+      {showLogPayment && (
+        <LogPaymentModal
+          tenant={tenant}
+          onClose={() => setShowLogPayment(false)}
+          onSave={(record) => {
+            onSavePayment?.(record)
+            refetchPayments()
+            setShowLogPayment(false)
+          }}
+        />
+      )}
     </ModalBackdrop>
   )
 }
@@ -3627,9 +4089,10 @@ interface ManagePropertyModalProps {
   setActivePanel: (panel: string) => void
   setSelectedThreadId: React.Dispatch<React.SetStateAction<string | null>>
   setThreads: React.Dispatch<React.SetStateAction<Thread[]>>
+  onViewTenant: (tenantId: string) => void
 }
 
-function ManagePropertyModal({ property, tenants, tickets, onClose, onUpdateProperty, onShowNewTicket }: ManagePropertyModalProps) {
+function ManagePropertyModal({ property, tenants, tickets, onClose, onUpdateProperty, onShowNewTicket, onViewTenant }: ManagePropertyModalProps) {
   const [tab, setTab] = useState<'overview'|'tenants'|'maintenance'|'settings'>('overview')
   const [settingsForm, setSettingsForm] = useState({
     address: property.address,
@@ -3730,14 +4193,14 @@ function ManagePropertyModal({ property, tenants, tickets, onClose, onUpdateProp
                     {propTenants.map(t => (
                       <tr key={t.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
                         <td className="py-2.5">
-                          <p className="font-medium text-gray-900">{t.name}</p>
+                          <button onClick={() => { onViewTenant(t.id); }} className="font-medium text-blue-600 hover:underline text-left">{t.name}</button>
                           <p className="text-xs text-gray-400">{t.email}</p>
                         </td>
                         <td className="py-2.5 text-gray-600">{t.unit}</td>
                         <td className="py-2.5 font-semibold">${t.rent.toLocaleString()}</td>
                         <td className="py-2.5 text-gray-600">{t.leaseEnd}</td>
                         <td className="py-2.5">
-                          <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${t.status === 'current' ? 'bg-green-100 text-green-700' : t.status === 'late' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
+                          <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${t.status === 'active' ? 'bg-green-100 text-green-700' : t.status === 'late' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
                             {t.status.charAt(0).toUpperCase()+t.status.slice(1)}
                           </span>
                         </td>
@@ -3893,9 +4356,10 @@ interface AnalyticsPanelProps {
   tenants?: Tenant[]
   properties?: Property[]
   tickets?: MaintenanceTicket[]
+  onViewTenant?: (tenantId: string) => void
 }
 
-function AnalyticsPanel({ initialSection = 'overview', rentRecords = [], tenants = [], properties = [], tickets = [], activityFeed = [] }: AnalyticsPanelProps & { activityFeed?: { id: string; type: string; text: string; time: string }[] }) {
+function AnalyticsPanel({ initialSection = 'overview', rentRecords = [], tenants = [], properties = [], tickets = [], activityFeed = [], onViewTenant }: AnalyticsPanelProps & { activityFeed?: { id: string; type: string; text: string; time: string }[] }) {
   const [subSection, setSubSection] = useState<'overview' | 'occupancy' | 'revenue' | 'maintenance' | 'rentroll' | 'cashflow'>(
     (initialSection as 'overview' | 'occupancy' | 'revenue' | 'maintenance' | 'rentroll' | 'cashflow') || 'overview'
   )
@@ -4321,7 +4785,12 @@ function AnalyticsPanel({ initialSection = 'overview', rentRecords = [], tenants
               <tbody>
                 {rentRollData.map(t => (
                   <tr key={t.id} className={`border-b border-gray-50 hover:bg-gray-50 ${!t.junePaid ? 'bg-red-50/30' : ''}`}>
-                    <td className="px-5 py-3 text-sm font-medium text-gray-900">{t.name}</td>
+                    <td className="px-5 py-3">
+                      {onViewTenant
+                        ? <button onClick={() => onViewTenant(t.id)} className="text-sm font-medium text-blue-600 hover:underline text-left">{t.name}</button>
+                        : <span className="text-sm font-medium text-gray-900">{t.name}</span>
+                      }
+                    </td>
                     <td className="px-5 py-3 text-sm text-gray-600">{t.unit}</td>
                     <td className="px-5 py-3 text-sm text-gray-600 max-w-[120px] truncate">{t.property}</td>
                     <td className="px-5 py-3 text-sm font-semibold text-gray-900">${t.rent.toLocaleString()}</td>
@@ -4536,13 +5005,14 @@ export default function AdminPortal() {
   // Auth
   const { user, signOut } = useAuth()
   const { demoMode, setDemoMode } = useDemoMode()
+  const { companyName } = useBranding()
 
   // Supabase data hooks
-  const { data: tenantsData } = useTenants()
-  const { data: propertiesData } = useProperties()
-  const { data: ticketsData } = useMaintenanceTickets()
+  const { data: tenantsData, loading: tenantsLoading } = useTenants()
+  const { data: propertiesData, loading: propertiesLoading } = useProperties()
+  const { data: ticketsData, loading: ticketsLoading } = useMaintenanceTickets()
   const { data: rentRecordsData, refetch: refetchRentRecords } = useRentRecords()
-  const { data: threadsData } = useThreads()
+  const { data: threadsData, loading: threadsLoading } = useThreads()
 
   // Shared state lifted to root
   const [tenants, setTenants] = useState<Tenant[]>([])
@@ -4551,38 +5021,32 @@ export default function AdminPortal() {
   const [threads, setThreads] = useState<Thread[]>([])
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null)
 
-  useEffect(() => { if (tenantsData.length) setTenants(tenantsData) }, [tenantsData])
-  useEffect(() => { if (propertiesData.length) setPropertiesList(propertiesData) }, [propertiesData])
-  useEffect(() => { if (ticketsData.length) setTickets(ticketsData) }, [ticketsData])
-  useEffect(() => { if (threadsData.length) setThreads(threadsData) }, [threadsData])
+  useEffect(() => { if (!tenantsLoading) setTenants(tenantsData) }, [tenantsData, tenantsLoading])
+  useEffect(() => { if (!propertiesLoading) setPropertiesList(propertiesData) }, [propertiesData, propertiesLoading])
+  useEffect(() => { if (!ticketsLoading) setTickets(ticketsData) }, [ticketsData, ticketsLoading])
+  useEffect(() => { if (!threadsLoading) setThreads(threadsData) }, [threadsData, threadsLoading])
 
-  // Profile state (from auth)
+  // Profile state (from auth + profiles table)
   const [profileName, setProfileName] = useState('')
+  const [profileEmail, setProfileEmail] = useState('')
+  const [profileCompany, setProfileCompany] = useState('')
   const [profilePhoto, setProfilePhoto] = useState<string | null>(null)
   useEffect(() => {
-    if (user) {
-      setProfileName(user.user_metadata?.full_name || user.email || 'Admin')
-      setProfilePhoto(user.user_metadata?.avatar_url || null)
-    }
+    if (!user) return
+    setProfileName(user.user_metadata?.full_name || user.email || 'Admin')
+    setProfileEmail(user.email || '')
+    setProfilePhoto(user.user_metadata?.avatar_url || null)
+    supabase.from('profiles')
+      .select('full_name, company, phone, avatar_url')
+      .eq('id', user.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!data) return
+        if (data.full_name) setProfileName(data.full_name as string)
+        if (data.company) setProfileCompany(data.company as string)
+        if (data.avatar_url) setProfilePhoto(data.avatar_url as string)
+      })
   }, [user])
-
-  // Notification bell state
-  const [showNotifs, setShowNotifs] = useState(false)
-  const STATIC_NOTIFS = [
-    { id: 'n1', type: 'maintenance', icon: 'wrench', title: 'New maintenance request', body: 'Sarah Mitchell submitted a plumbing request — Unit 4B', time: '2 min ago' },
-    { id: 'n2', type: 'payment', icon: 'dollar', title: 'Rent received', body: 'Rachel Green paid $1,250 — Unit 4A', time: '1 hour ago' },
-    { id: 'n3', type: 'lease', icon: 'file', title: 'Lease expiring soon', body: 'Jessica Park, Unit 2A — expires Aug 31, 2026', time: '3 hours ago' },
-    { id: 'n4', type: 'maintenance', icon: 'check', title: 'Ticket resolved', body: 'Ticket #1031 resolved — Maria Santos, Unit 3A', time: '1 day ago' },
-    { id: 'n5', type: 'move', icon: 'user', title: 'Portal login', body: 'Sarah Mitchell logged into tenant portal', time: '2 days ago' },
-  ]
-  const [notifications, setNotifications] = useState(() => {
-    try {
-      const readIds: string[] = JSON.parse(localStorage.getItem('bmp_readNotifs') ?? '[]')
-      return STATIC_NOTIFS.map(n => ({ ...n, read: readIds.includes(n.id) }))
-    } catch {
-      return STATIC_NOTIFS.map(n => ({ ...n, read: false }))
-    }
-  })
 
   // Profile dropdown state
   const [showProfileMenu, setShowProfileMenu] = useState(false)
@@ -4638,20 +5102,37 @@ export default function AdminPortal() {
   // Focused maintenance ticket (from property tickets modal)
   const [focusedMaintenanceTicketId, setFocusedMaintenanceTicketId] = useState<string | null>(null)
 
-  // Notification outside-click ref
-  const notifRef = useRef<HTMLDivElement>(null)
+  async function confirmPayment(recordId: string) {
+    if (demoMode) { showToast({ type: 'info', title: 'Demo mode — no changes saved' }); return }
+    const record = rentRecords.find(r => r.id === recordId)
+    const today = new Date().toISOString().slice(0, 10)
+    const { error } = await supabase
+      .from('rent_payments')
+      .update({ status: 'paid', paid_date: today })
+      .eq('id', recordId)
+    if (error) { showToast({ type: 'error', title: 'Failed to confirm payment', body: error.message }); return }
+    setRentRecords(prev => prev.map(r => r.id === recordId ? { ...r, status: 'paid' as const, datePaid: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) } : r))
+    if (record) {
+      notifyUser(record.tenantId, {
+        type: 'payment',
+        title: 'Payment confirmed',
+        body: `Your ${record.month} rent payment of $${record.amount.toLocaleString()} has been confirmed by your property manager.`,
+        link: '/tenant',
+      })
+    }
+    showToast({ type: 'success', title: 'Payment confirmed' })
+  }
+
+  // Profile-menu outside-click ref
   const profileMenuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
-      if (notifRef.current && !notifRef.current.contains(e.target as Node)) setShowNotifs(false)
       if (profileMenuRef.current && !profileMenuRef.current.contains(e.target as Node)) setShowProfileMenu(false)
     }
     document.addEventListener('mousedown', handleClick)
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
-
-  const unreadNotifCount = notifications.filter(n => !n.read).length
 
   // Badge counts
   const unreadMessages = threads.reduce((s, t) => s + t.unread, 0)
@@ -4683,10 +5164,11 @@ export default function AdminPortal() {
             properties={propertiesList}
             rentRecords={rentRecords}
             recentActivity={recentActivity}
+            onConfirmPayment={confirmPayment}
           />
         )
       case 'analytics':
-        return <AnalyticsPanel initialSection={analyticsSection} rentRecords={rentRecords} tenants={tenants} properties={propertiesList} tickets={tickets} activityFeed={recentActivity} />
+        return <AnalyticsPanel initialSection={analyticsSection} rentRecords={rentRecords} tenants={tenants} properties={propertiesList} tickets={tickets} activityFeed={recentActivity} onViewTenant={(id) => setViewTenantId(id)} />
       case 'properties':
         return (
           <PropertiesPanel
@@ -4700,6 +5182,7 @@ export default function AdminPortal() {
               setFocusedMaintenanceTicketId(ticketId)
               setActivePanel('maintenance')
             }}
+            onViewTenant={(id) => setViewTenantId(id)}
           />
         )
       case 'tenants':
@@ -4727,6 +5210,7 @@ export default function AdminPortal() {
             focusedTicketId={focusedMaintenanceTicketId}
             onClearFocus={() => setFocusedMaintenanceTicketId(null)}
             addActivity={addActivity}
+            onViewTenant={(id) => setViewTenantId(id)}
           />
         )
       case 'messages':
@@ -4758,6 +5242,7 @@ export default function AdminPortal() {
   const panelNeedsFullHeight = activePanel === 'messages' || activePanel === 'settings'
 
   return (
+    <NotificationsProvider>
     <div className="flex h-screen bg-gray-100 overflow-hidden">
       {/* Sidebar */}
       <div
@@ -4769,12 +5254,10 @@ export default function AdminPortal() {
         }}
       >
         {/* Logo / Brand */}
-        <div className="flex items-center gap-3 px-4 py-5" style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
-          <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 shadow-lg" style={{ background: 'linear-gradient(135deg, #3B82F6 0%, #1D4ED8 100%)' }}>
-            <Building2 className="w-4.5 h-4.5 text-white" />
-          </div>
+        <div className={`flex items-center gap-3 py-5 ${sidebarOpen ? 'px-4' : 'justify-center px-0'}`} style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
+          <BrandLogo wrapperClassName="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 shadow-lg overflow-hidden" iconClassName="w-4.5 h-4.5 text-white" style={{ background: 'linear-gradient(135deg, #3B82F6 0%, #1D4ED8 100%)' }} />
           <div className={`transition-all duration-300 overflow-hidden ${sidebarOpen ? 'opacity-100 w-auto' : 'opacity-0 w-0 pointer-events-none'}`}>
-            <p className="text-white font-bold text-sm whitespace-nowrap tracking-tight">BMP Central</p>
+            <p className="text-white font-bold text-sm whitespace-nowrap tracking-tight">{companyName}</p>
             <p className="text-slate-500 text-[11px] whitespace-nowrap font-medium tracking-wide uppercase">Admin Portal</p>
           </div>
         </div>
@@ -4840,7 +5323,10 @@ export default function AdminPortal() {
         </div>
 
         {/* Profile row */}
-        <div className="mx-3 mb-3 rounded-xl p-3 flex items-center gap-3" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)' }}>
+        <div
+          className={`mx-3 mb-1 rounded-xl p-3 flex items-center gap-3 ${!sidebarOpen ? 'justify-center' : ''}`}
+          style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)' }}
+        >
           {profilePhoto ? (
             <img src={profilePhoto} alt="Profile" className="w-8 h-8 rounded-full object-cover shrink-0 ring-2 ring-blue-500/40" />
           ) : (
@@ -4848,35 +5334,32 @@ export default function AdminPortal() {
               {profileName.split(' ').map(w => w[0]).join('').slice(0, 2)}
             </div>
           )}
-          <div className={`flex-1 min-w-0 transition-all duration-300 overflow-hidden ${sidebarOpen ? 'opacity-100 w-auto' : 'opacity-0 w-0 pointer-events-none'}`}>
-            <p className="text-sm font-semibold text-white whitespace-nowrap truncate">{profileName}</p>
-            <p className="text-[11px] text-slate-500 whitespace-nowrap">Administrator</p>
-          </div>
           {sidebarOpen && (
-            <button
-              onClick={() => setSidebarOpen(false)}
-              className="shrink-0 w-6 h-6 rounded-lg flex items-center justify-center text-slate-500 hover:text-white hover:bg-white/10 transition-colors"
-              title="Collapse"
-            >
-              <ChevronLeft className="w-3.5 h-3.5" />
-            </button>
-          )}
-          {!sidebarOpen && (
-            <span className="sr-only">Expand</span>
+            <>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-white whitespace-nowrap truncate">{profileName}</p>
+                <p className="text-[11px] text-slate-500 whitespace-nowrap">Administrator</p>
+              </div>
+              <button
+                onClick={() => setSidebarOpen(false)}
+                className="shrink-0 w-6 h-6 rounded-lg flex items-center justify-center text-slate-500 hover:text-white hover:bg-white/10 transition-colors"
+                title="Collapse"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+              </button>
+            </>
           )}
         </div>
 
         {/* Expand button when collapsed */}
-        {!sidebarOpen && (
-          <button
-            onClick={() => setSidebarOpen(true)}
-            className="mx-3 mb-3 w-11 h-9 rounded-xl flex items-center justify-center text-slate-500 hover:text-white transition-colors"
-            style={{ background: 'rgba(255,255,255,0.05)' }}
-            title="Expand sidebar"
-          >
-            <ChevronRight className="w-4 h-4" />
-          </button>
-        )}
+        <button
+          onClick={() => setSidebarOpen(!sidebarOpen)}
+          className="mx-3 mb-3 rounded-xl h-8 flex items-center justify-center text-slate-500 hover:text-white transition-colors"
+          style={{ background: 'rgba(255,255,255,0.04)' }}
+          title={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
+        >
+          {sidebarOpen ? <ChevronLeft className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+        </button>
       </div>
 
       {/* Main content */}
@@ -4892,7 +5375,7 @@ export default function AdminPortal() {
                   : activePanel === 'analytics' ? 'Analytics'
                   : activePanel.charAt(0).toUpperCase() + activePanel.slice(1)}
               </h1>
-              <p className="text-[11px] text-gray-400 mt-0.5">BMP Central · {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</p>
+              <p className="text-[11px] text-gray-400 mt-0.5">{companyName} · {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -4907,82 +5390,20 @@ export default function AdminPortal() {
             {/* Separator */}
             <div className="w-px h-5 bg-gray-200 mx-1" />
             {/* Bell */}
-            <div className="relative" ref={notifRef}>
-              <button
-                onClick={() => { setShowNotifs(!showNotifs); setShowProfileMenu(false) }}
-                className={`relative w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${showNotifs ? 'bg-blue-50 text-blue-600' : 'text-gray-400 hover:bg-gray-100 hover:text-gray-600'}`}
-              >
-                <Bell className="w-4 h-4" />
-                {unreadNotifCount > 0 && (
-                  <span className="absolute top-0.5 right-0.5 min-w-[14px] h-3.5 bg-red-500 text-white text-[9px] rounded-full flex items-center justify-center font-bold px-0.5 leading-none">
-                    {unreadNotifCount}
-                  </span>
-                )}
-              </button>
-              {showNotifs && (
-                <div className="absolute top-full right-0 mt-2 w-[340px] bg-white rounded-2xl shadow-2xl border border-gray-100 z-50 animate-fade-in overflow-hidden">
-                  <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100">
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-gray-900 text-sm">Notifications</span>
-                      {unreadNotifCount > 0 && (
-                        <span className="min-w-[20px] h-5 bg-blue-600 text-white text-xs rounded-full flex items-center justify-center font-bold px-1.5">{unreadNotifCount}</span>
-                      )}
-                    </div>
-                    <button
-                      onClick={() => {
-                        setNotifications(prev => {
-                          const next = prev.map(n => ({ ...n, read: true }))
-                          localStorage.setItem('bmp_readNotifs', JSON.stringify(next.map(n => n.id)))
-                          return next
-                        })
-                      }}
-                      className="text-xs text-blue-600 hover:text-blue-800 font-semibold"
-                    >
-                      Mark all read
-                    </button>
-                  </div>
-                  <div className="max-h-80 overflow-y-auto divide-y divide-gray-50">
-                    {notifications.map(n => (
-                      <button
-                        key={n.id}
-                        onClick={() => {
-                          setNotifications(prev => {
-                            const next = prev.map(x => x.id === n.id ? { ...x, read: true } : x)
-                            localStorage.setItem('bmp_readNotifs', JSON.stringify(next.filter(x => x.read).map(x => x.id)))
-                            return next
-                          })
-                          if (n.type === 'maintenance') setActivePanel('maintenance')
-                          else if (n.type === 'payment') setActivePanel('dashboard')
-                          else if (n.type === 'lease') setActivePanel('tenants')
-                          setShowNotifs(false)
-                        }}
-                        className={`w-full text-left px-5 py-3.5 hover:bg-gray-50 transition-colors flex items-start gap-3 ${!n.read ? 'bg-blue-50/60' : ''}`}
-                      >
-                        <div className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${n.read ? 'bg-gray-300' : 'bg-blue-500'}`} />
-                        <div className="flex-1 min-w-0">
-                          <p className={`text-sm leading-snug ${!n.read ? 'font-semibold text-gray-900' : 'font-medium text-gray-700'}`}>{n.title}</p>
-                          <p className="text-xs text-gray-500 truncate mt-0.5">{n.body}</p>
-                          <p className="text-xs text-gray-400 mt-1">{n.time}</p>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                  <div className="px-5 py-3 border-t border-gray-100 bg-gray-50">
-                    <button
-                      onClick={() => { showToast({ type: 'info', title: 'View all notifications' }); setShowNotifs(false) }}
-                      className="text-xs text-blue-600 hover:text-blue-800 font-semibold w-full text-center"
-                    >
-                      View all notifications →
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
+            <NotificationBell
+              align="right"
+              onItemClick={(n) => {
+                if (n.type === 'maintenance') setActivePanel('maintenance')
+                else if (n.type === 'payment') setActivePanel('dashboard')
+                else if (n.type === 'lease') setActivePanel('tenants')
+                else if (n.type === 'message') setActivePanel('messages')
+              }}
+            />
 
             {/* Profile button */}
             <div className="relative ml-1" ref={profileMenuRef}>
               <button
-                onClick={() => { setShowProfileMenu(!showProfileMenu); setShowNotifs(false) }}
+                onClick={() => { setShowProfileMenu(!showProfileMenu) }}
                 className="flex items-center gap-2 pl-1 pr-2.5 py-1 rounded-full border border-gray-200 hover:border-gray-300 hover:bg-gray-50 transition-all"
               >
                 {profilePhoto ? (
@@ -5008,7 +5429,8 @@ export default function AdminPortal() {
                       )}
                       <div>
                         <p className="text-sm font-bold text-gray-900">{profileName}</p>
-                        <p className="text-xs text-gray-500">admin@bmpcentral.com</p>
+                        <p className="text-xs text-gray-500 truncate max-w-[140px]">{profileEmail}</p>
+                        {profileCompany && <p className="text-xs text-gray-400 truncate max-w-[140px]">{profileCompany}</p>}
                         <span className="inline-flex items-center gap-1 mt-1 text-[10px] font-semibold text-blue-700 bg-blue-100 px-1.5 py-0.5 rounded-full">Administrator</span>
                       </div>
                     </div>
@@ -5145,6 +5567,7 @@ export default function AdminPortal() {
           setActivePanel={setActivePanel}
           setSelectedThreadId={setSelectedThreadId}
           setThreads={setThreads}
+          onViewTenant={(id) => { setManagePropertyId(null); setViewTenantId(id) }}
         />
       )}
       {editTenantId && (
@@ -5187,6 +5610,7 @@ export default function AdminPortal() {
             setActivePanel('messages')
             setViewTenantId(null)
           }}
+          onSavePayment={(record) => setRentRecords(prev => [record, ...prev])}
         />
       )}
       {showShortcutsModal && (
@@ -5222,14 +5646,16 @@ export default function AdminPortal() {
             tenant={t}
             onClose={() => setLogPaymentTenantId(null)}
             onSave={async (record) => {
+              if (demoMode) { showToast({ type: 'info', title: 'Demo mode — no changes saved' }); setLogPaymentTenantId(null); return }
               setRentRecords(prev => {
                 const filtered = prev.filter(r => !(r.tenantId === record.tenantId && r.month === record.month))
                 return [...filtered, record]
               })
+              if (!user) { setLogPaymentTenantId(null); return }
               // Persist to Supabase — month string like "June 2026" parses to the 1st of that month
               const dueDate = new Date(record.month)
               const { error } = await supabase.from('rent_payments').insert({
-                pm_id: user?.id,
+                pm_id: user.id,
                 tenant_id: record.tenantId,
                 amount: record.amount,
                 due_date: (isNaN(dueDate.getTime()) ? new Date() : dueDate).toISOString().slice(0, 10),
@@ -5246,5 +5672,6 @@ export default function AdminPortal() {
         )
       })()}
     </div>
+    </NotificationsProvider>
   )
 }

@@ -1,17 +1,25 @@
 import { useState, useRef, useEffect, createContext, useContext } from 'react'
 import {
-  Home, DollarSign, Wrench, MessageSquare, FileText, Bell,
+  Home, DollarSign, Wrench, MessageSquare, FileText,
   ChevronRight, Check, X, Plus, Send, Smile, Paperclip,
-  Edit2, MoreHorizontal, Upload, CreditCard, Building2, Search,
+  Edit2, MoreHorizontal, Upload, CreditCard, Building2, Search, LogOut,
 } from 'lucide-react'
 import type { Tenant } from '../data/mockData'
 import { supabase } from '../lib/supabase'
+import { useBranding } from '../context/BrandingContext'
+import { BrandLogo } from '../components/BrandLogo'
+import { NotificationBell } from '../components/NotificationBell'
+import { NotificationsProvider } from '../hooks/useNotifications'
+import { notifyUser } from '../lib/notify'
+import { useDocuments } from '../hooks/useDocuments'
 import { useCurrentTenant } from '../hooks/useTenants'
 import { useMaintenanceTickets } from '../hooks/useMaintenanceTickets'
 import { useRentRecords } from '../hooks/useRentRecords'
 import { useThreads } from '../hooks/useThreads'
 import { useMessages } from '../hooks/useMessages'
 import { showToast } from '../components/Toast'
+import { useAuth } from '../context/AuthContext'
+import { useDemoMode } from '../context/DemoModeContext'
 
 // ─── Tenant Context ───────────────────────────────────────────────────────────
 const TenantCtx = createContext<{ tenant: Tenant | null; tenantId: string | null; pmId: string | null; unitId: string | null }>({ tenant: null, tenantId: null, pmId: null, unitId: null })
@@ -446,60 +454,31 @@ function PayRentModal({
 }: {
   amount: number
   onClose: () => void
-  onSuccess: (method: string, amt: number) => void
+  onSuccess: (method: string, amt: number, note: string) => void
 }) {
   const [payAmount, setPayAmount] = useState(String(amount))
-  const [method, setMethod] = useState<'ACH Transfer' | 'Debit Card' | 'Credit Card'>('ACH Transfer')
-  const [cardNumber, setCardNumber] = useState('')
-  const [expiry, setExpiry] = useState('')
-  const [cvv, setCvv] = useState('')
+  const [method, setMethod] = useState('Cash')
+  const [note, setNote] = useState('')
   const [loading, setLoading] = useState(false)
-  const [success, setSuccess] = useState(false)
-  const [confirmNo] = useState(`BMP-${Date.now().toString().slice(-8)}`)
+  const [done, setDone] = useState(false)
 
-  const needsCard = method === 'Debit Card' || method === 'Credit Card'
-
-  function submit() {
+  async function submit() {
     setLoading(true)
-    setTimeout(() => {
-      setLoading(false)
-      setSuccess(true)
-    }, 1500)
+    await onSuccess(method, Number(payAmount) || amount, note.trim())
+    setLoading(false)
+    setDone(true)
   }
 
-  if (success) {
-    const now = new Date()
-    const dateStr = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  if (done) {
     return (
-      <ModalBackdrop onClose={() => { onSuccess(method, Number(payAmount) || amount); onClose() }}>
+      <ModalBackdrop onClose={onClose}>
         <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8 text-center">
-          <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Check className="w-8 h-8 text-green-600" />
+          <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Check className="w-8 h-8 text-amber-600" />
           </div>
-          <h2 className="text-xl font-bold text-gray-900 mb-1">Payment Successful!</h2>
-          <p className="text-sm text-gray-500 mb-6">Your payment has been processed.</p>
-          <div className="bg-gray-50 rounded-xl p-4 text-left space-y-2 text-sm mb-6">
-            <div className="flex justify-between">
-              <span className="text-gray-500">Confirmation #</span>
-              <span className="font-mono font-bold text-blue-600">{confirmNo}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-500">Amount</span>
-              <span className="font-bold text-gray-900">${Number(payAmount || amount).toLocaleString()}.00</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-500">Date</span>
-              <span className="font-semibold text-gray-900">{dateStr}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-500">Method</span>
-              <span className="font-semibold text-gray-900">{method}</span>
-            </div>
-          </div>
-          <button
-            onClick={() => { onSuccess(method, Number(payAmount) || amount); onClose() }}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors"
-          >
+          <h2 className="text-xl font-bold text-gray-900 mb-1">Payment Reported</h2>
+          <p className="text-sm text-gray-500 mb-6">Your property manager has been notified and will confirm your payment shortly.</p>
+          <button onClick={onClose} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors">
             Done
           </button>
         </div>
@@ -511,7 +490,10 @@ function PayRentModal({
     <ModalBackdrop onClose={onClose}>
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-          <h2 className="text-lg font-bold text-gray-900">Pay Rent</h2>
+          <div>
+            <h2 className="text-lg font-bold text-gray-900">Report Payment</h2>
+            <p className="text-xs text-gray-500 mt-0.5">Let your property manager know you've paid</p>
+          </div>
           <button onClick={onClose} className="w-8 h-8 rounded-lg bg-gray-100 hover:bg-gray-200 flex items-center justify-center">
             <X className="w-4 h-4" />
           </button>
@@ -527,9 +509,9 @@ function PayRentModal({
             />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-gray-700 mb-2">Payment Method</label>
+            <label className="block text-xs font-semibold text-gray-700 mb-2">How did you pay?</label>
             <div className="space-y-2">
-              {(['ACH Transfer', 'Debit Card', 'Credit Card'] as const).map((m) => (
+              {(['Cash', 'e-Transfer', 'Cheque', 'Bank Transfer', 'Other'] as const).map((m) => (
                 <label key={m} className="flex items-center gap-3 p-3 border border-gray-200 rounded-xl cursor-pointer hover:bg-gray-50">
                   <input
                     type="radio"
@@ -543,40 +525,16 @@ function PayRentModal({
               ))}
             </div>
           </div>
-          {needsCard && (
-            <div className="space-y-3 bg-gray-50 rounded-xl p-4">
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Card Number</label>
-                <input
-                  value={cardNumber}
-                  onChange={(e) => setCardNumber(e.target.value)}
-                  maxLength={19}
-                  placeholder="•••• •••• •••• ••••"
-                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Expiry (MM/YY)</label>
-                  <input
-                    value={expiry}
-                    onChange={(e) => setExpiry(e.target.value)}
-                    placeholder="MM/YY"
-                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">CVV</label>
-                  <input
-                    value={cvv}
-                    onChange={(e) => setCvv(e.target.value)}
-                    placeholder="•••"
-                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-              </div>
-            </div>
-          )}
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 mb-1">Note (optional)</label>
+            <textarea
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              rows={2}
+              placeholder="e.g. Sent via e-Transfer to manager@example.com"
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+            />
+          </div>
           <button
             onClick={submit}
             disabled={loading}
@@ -588,10 +546,10 @@ function PayRentModal({
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
                 </svg>
-                Processing…
+                Submitting…
               </>
             ) : (
-              `Submit Payment — $${Number(payAmount || amount).toLocaleString()}`
+              `Report Payment — $${Number(payAmount || amount).toLocaleString()}`
             )}
           </button>
         </div>
@@ -604,6 +562,7 @@ function PayRentModal({
 
 function ReceiptModal({ row, onClose }: { row: PaymentRow; onClose: () => void }) {
   const { tenant } = useContext(TenantCtx)
+  const { companyName, tagline } = useBranding()
   const year = row.datePaid.split(', ')[1] ?? '2026'
   const monthNum =
     ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].indexOf(
@@ -618,9 +577,9 @@ function ReceiptModal({ row, onClose }: { row: PaymentRow; onClose: () => void }
         <div className="bg-blue-600 rounded-t-xl px-6 py-4 text-white">
           <div className="flex items-center gap-2 mb-1">
             <Building2 className="w-5 h-5" />
-            <span className="font-bold text-lg">BMP Central</span>
+            <span className="font-bold text-lg">{companyName}</span>
           </div>
-          <p className="text-blue-200 text-xs">Oakwood Property Management</p>
+          <p className="text-blue-200 text-xs">{tagline}</p>
         </div>
         <div className="p-6 space-y-4">
           <div className="flex items-center justify-between">
@@ -629,7 +588,7 @@ function ReceiptModal({ row, onClose }: { row: PaymentRow; onClose: () => void }
           </div>
           <div className="bg-gray-50 rounded-xl p-4 space-y-2 text-sm">
             <div className="flex justify-between"><span className="text-gray-500">Receipt #</span><span className="font-mono font-semibold text-gray-900">{receiptNo}</span></div>
-            <div className="flex justify-between"><span className="text-gray-500">From</span><span className="font-semibold text-gray-900">BMP Central</span></div>
+            <div className="flex justify-between"><span className="text-gray-500">From</span><span className="font-semibold text-gray-900">{companyName}</span></div>
             <div className="flex justify-between"><span className="text-gray-500">To</span><span className="font-semibold text-gray-900">{tenant?.name ?? '—'}</span></div>
             <div className="flex justify-between"><span className="text-gray-500">Unit</span><span className="font-semibold text-gray-900">Unit {tenant?.unit ?? '—'}, {tenant?.property ?? '—'}</span></div>
             <div className="h-px bg-gray-200" />
@@ -920,6 +879,7 @@ function MaintenanceListTab({ onNew }: { onNew: () => void }) {
 
 function PaymentsTab() {
   const { tenant, tenantId, pmId } = useContext(TenantCtx)
+  const { demoMode } = useDemoMode()
   const { data: rentRecords, refetch: refetchRent } = useRentRecords(tenantId ?? undefined)
   const [autopay, setAutopay] = useState(true)
   const [receiptRow, setReceiptRow] = useState<PaymentRow | null>(null)
@@ -933,21 +893,22 @@ function PaymentsTab() {
     status: r.status,
   }))
 
-  async function handlePaySuccess(method: string, amt: number) {
-    if (tenantId) {
+  async function handlePaySuccess(method: string, amt: number, note: string) {
+    if (demoMode) { showToast({ type: 'info', title: 'Demo mode — no payment recorded' }); return }
+    if (tenantId && pmId) {
       const today = new Date()
+      const noteText = [method, note].filter(Boolean).join(' — ')
       await supabase.from('rent_payments').insert({
         pm_id: pmId,
         tenant_id: tenantId,
         amount: amt,
         due_date: today.toISOString().slice(0, 10),
-        paid_date: today.toISOString().slice(0, 10),
-        status: 'paid',
-        note: method,
+        status: 'pending',
+        note: noteText,
       })
       await refetchRent()
     }
-    showToast({ type: 'success', title: `Payment of $${amt.toLocaleString()} confirmed` })
+    showToast({ type: 'success', title: 'Payment reported', body: 'Your property manager will confirm receipt shortly.' })
   }
 
   const rentAmount = tenant?.rent ?? 0
@@ -1035,9 +996,15 @@ function PaymentsTab() {
                     </span>
                   </td>
                   <td className="px-5 py-3">
-                    <button onClick={() => setReceiptRow(r)} className="text-xs font-semibold text-blue-600 hover:text-blue-700">
-                      Download
-                    </button>
+                    {r.status === 'paid' ? (
+                      <button onClick={() => setReceiptRow(r)} className="text-xs font-semibold text-blue-600 hover:text-blue-700">
+                        Download
+                      </button>
+                    ) : r.status === 'pending' ? (
+                      <span className="text-xs text-amber-600 font-medium">Awaiting confirmation</span>
+                    ) : (
+                      <span className="text-xs text-gray-400">—</span>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -1109,24 +1076,46 @@ const EMOJI_LIST = [
 
 // ─── Messages Tab — iMessage style ───────────────────────────────────────────
 
+type Attachment = { name: string; size: string; file: File; previewUrl: string | null }
+
+function isImageUrl(str: string) {
+  try { return /\.(jpg|jpeg|png|gif|webp)(\?|$)/i.test(new URL(str).pathname) } catch { return false }
+}
+
+function MessageBody({ text, isTenant }: { text: string; isTenant: boolean }) {
+  const lines = text.split('\n')
+  return (
+    <>
+      {lines.map((line, i) =>
+        isImageUrl(line.trim()) ? (
+          <img key={i} src={line.trim()} className="max-w-[260px] rounded-xl mt-1 block" alt="attachment" />
+        ) : (
+          <span key={i}>{line}{i < lines.length - 1 && '\n'}</span>
+        )
+      )}
+    </>
+  )
+}
+
 function TenantMessagesTab() {
   const { tenantId, pmId } = useContext(TenantCtx)
+  const { demoMode } = useDemoMode()
+  const { companyName } = useBranding()
+  const brandInitials = companyName.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase()
   const { data: dbThreads } = useThreads(tenantId ?? undefined, 'tenant')
   const [selectedThreadId, setSelectedThreadId] = useState<null | string>(null)
 
   const firstThreadId = dbThreads[0]?.id ?? null
   const activeThreadId = selectedThreadId ?? firstThreadId
 
-  const { data: messages } = useMessages(activeThreadId ?? null)
+  const { data: messages, setData: setMessages } = useMessages(activeThreadId ?? null)
 
   const [compose, setCompose] = useState('')
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [editText, setEditText] = useState('')
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null)
-  const [editedPopoverId, setEditedPopoverId] = useState<string | null>(null)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
-  const [attachments, setAttachments] = useState<{ name: string; size: string }[]>([])
+  const [attachments, setAttachments] = useState<Attachment[]>([])
   const [threadSearch, setThreadSearch] = useState('')
+  const [sending, setSending] = useState(false)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -1144,9 +1133,8 @@ function TenantMessagesTab() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [threadMessages.length, activeThreadId])
 
-  // Opening the thread marks the PM's messages as read
   useEffect(() => {
-    if (!activeThreadId || !pmId) return
+    if (demoMode || !activeThreadId || !pmId) return
     supabase.from('messages')
       .update({ read: true })
       .eq('tenant_id', activeThreadId)
@@ -1165,17 +1153,61 @@ function TenantMessagesTab() {
 
   async function sendMessage() {
     if (!compose.trim() && attachments.length === 0) return
+    if (demoMode) { showToast({ type: 'info', title: 'Demo mode — message not sent' }); setCompose(''); setAttachments([]); return }
     if (!activeThreadId || !pmId) return
-    const text = [compose.trim(), ...attachments.map((a) => `📎 ${a.name} (${a.size})`)].filter(Boolean).join('\n')
-    await supabase.from('messages').insert({
-      pm_id: pmId,
-      tenant_id: activeThreadId,
-      sender: 'tenant',
-      body: text,
-      read: false,
-    })
+
+    setSending(true)
+    const textParts = [compose.trim()]
+
+    // Upload image attachments to storage
+    for (const att of attachments) {
+      const ext = att.name.split('.').pop() ?? 'bin'
+      const path = `${await auth_uid()}/${crypto.randomUUID()}.${ext}`
+      const { data: uploaded, error: upErr } = await supabase.storage
+        .from('message-attachments')
+        .upload(path, att.file, { contentType: att.file.type, upsert: false })
+      if (!upErr && uploaded) {
+        const { data: { publicUrl } } = supabase.storage.from('message-attachments').getPublicUrl(uploaded.path)
+        textParts.push(publicUrl)
+      } else {
+        textParts.push(`📎 ${att.name} (${att.size})`)
+      }
+    }
+
+    const text = textParts.filter(Boolean).join('\n')
+    const optimisticId = `opt-${Date.now()}`
+    const optimistic = {
+      id: optimisticId, threadId: activeThreadId, senderId: 'tenant' as const,
+      senderName: '', text, timestamp: '', sentAt: Date.now(), edited: false, unsent: false,
+    }
+    setMessages((prev) => [...prev, optimistic])
     setCompose('')
     setAttachments([])
+    setSending(false)
+
+    const { data: inserted, error } = await supabase.from('messages').insert({
+      pm_id: pmId, tenant_id: activeThreadId, sender: 'tenant', body: text, read: false,
+    }).select().single()
+
+    if (error) {
+      setMessages((prev) => prev.filter((m) => m.id !== optimisticId))
+      showToast({ type: 'error', title: 'Failed to send message' })
+      return
+    }
+    if (inserted) {
+      setMessages((prev) => prev.map((m) => m.id === optimisticId ? { ...m, id: inserted.id as string } : m))
+    }
+    notifyUser(pmId, {
+      type: 'message',
+      title: `New message from ${activeThread?.tenantName ?? 'a tenant'}`,
+      body: compose.trim() || 'Sent an attachment',
+      link: '/admin',
+    })
+  }
+
+  async function auth_uid(): Promise<string> {
+    const { data: { user } } = await supabase.auth.getUser()
+    return user?.id ?? 'anon'
   }
 
   function insertEmoji(emoji: string) {
@@ -1194,21 +1226,18 @@ function TenantMessagesTab() {
 
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? [])
-    const items = files.map((f) => ({
+    const items: Attachment[] = files.map((f) => ({
       name: f.name,
       size: f.size < 1024 * 1024 ? `${Math.round(f.size / 1024)} KB` : `${(f.size / 1024 / 1024).toFixed(1)} MB`,
+      file: f,
+      previewUrl: f.type.startsWith('image/') ? URL.createObjectURL(f) : null,
     }))
     setAttachments((prev) => [...prev, ...items])
     e.target.value = ''
   }
 
-  async function saveEdit(id: string) {
-    await supabase.from('messages').update({ body: editText }).eq('id', id)
-    setEditingId(null)
-  }
-
   async function unsendMessage(id: string) {
-    await supabase.from('messages').delete().eq('id', id)
+    if (!demoMode) await supabase.from('messages').delete().eq('id', id)
     setMenuOpenId(null)
   }
 
@@ -1275,11 +1304,11 @@ function TenantMessagesTab() {
           {/* Header */}
           <div className="px-5 py-3 border-b border-gray-200 bg-white flex items-center gap-3 shadow-sm shrink-0">
             <div className="relative">
-              <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold text-sm">BC</div>
+              <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold text-sm">{brandInitials}</div>
               <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-400 border-2 border-white rounded-full" />
             </div>
             <div>
-              <p className="font-bold text-gray-900">BMP Central</p>
+              <p className="font-bold text-gray-900">{companyName}</p>
               <p className="text-xs text-gray-500">{activeThread.tenantUnit} · Active now</p>
             </div>
           </div>
@@ -1300,30 +1329,6 @@ function TenantMessagesTab() {
                 )
               }
 
-              if (editingId === msg.id) {
-                return (
-                  <div key={msg.id} className={`flex ${isTenant ? 'justify-end' : 'justify-start'} ${showSenderBreak ? 'mt-3' : ''}`}>
-                    <div className="max-w-[72%] space-y-2">
-                      <textarea
-                        rows={3}
-                        className="w-full px-3 py-2 text-sm border border-blue-400 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none bg-white shadow-sm"
-                        value={editText}
-                        onChange={(e) => setEditText(e.target.value)}
-                        autoFocus
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveEdit(msg.id) }
-                          if (e.key === 'Escape') setEditingId(null)
-                        }}
-                      />
-                      <div className="flex gap-2">
-                        <button onClick={() => saveEdit(msg.id)} className="text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded-full font-semibold">Save</button>
-                        <button onClick={() => setEditingId(null)} className="text-xs text-gray-500 hover:text-gray-700 px-3 py-1 rounded-full border border-gray-200 bg-white">Cancel</button>
-                      </div>
-                    </div>
-                  </div>
-                )
-              }
-
               return (
                 <div
                   key={msg.id}
@@ -1332,7 +1337,7 @@ function TenantMessagesTab() {
                   {!isTenant && (
                     <div className="shrink-0 w-7">
                       {isLastInGroup && (
-                        <div className="w-7 h-7 bg-blue-600 rounded-full flex items-center justify-center text-white text-xs font-bold">BC</div>
+                        <div className="w-7 h-7 bg-blue-600 rounded-full flex items-center justify-center text-white text-xs font-bold">{brandInitials}</div>
                       )}
                     </div>
                   )}
@@ -1343,23 +1348,7 @@ function TenantMessagesTab() {
                           ? `bg-blue-600 text-white shadow-sm ${isLastInGroup ? 'rounded-[20px] rounded-br-[5px]' : 'rounded-[20px]'}`
                           : `bg-white text-gray-900 border border-gray-200 shadow-sm ${isLastInGroup ? 'rounded-[20px] rounded-bl-[5px]' : 'rounded-[20px]'}`
                       }`}>
-                        {msg.text}
-                        {msg.edited && (
-                          <span className="relative">
-                            <button
-                              onClick={() => setEditedPopoverId(editedPopoverId === msg.id ? null : msg.id)}
-                              className={`text-xs italic ml-1.5 ${isTenant ? 'text-blue-200' : 'text-gray-400'} hover:underline`}
-                            >
-                              edited
-                            </button>
-                            {editedPopoverId === msg.id && (
-                              <div className="absolute bottom-full left-0 mb-2 bg-gray-900 rounded-xl px-4 py-3 w-[220px] z-20 shadow-xl">
-                                <p className="text-xs font-semibold text-gray-400 mb-1 uppercase tracking-wider">Original</p>
-                                <p className="text-sm text-white">{msg.originalText}</p>
-                              </div>
-                            )}
-                          </span>
-                        )}
+                        <MessageBody text={msg.text} isTenant={isTenant} />
                       </div>
                       {/* Hover actions */}
                       <div className={`absolute top-1/2 -translate-y-1/2 ${isTenant ? '-left-9' : '-right-9'} hidden group-hover:flex`}>
@@ -1373,20 +1362,12 @@ function TenantMessagesTab() {
                           {menuOpenId === msg.id && (
                             <div className={`absolute ${isTenant ? 'right-8' : 'left-8'} top-0 bg-white border border-gray-200 rounded-xl shadow-lg py-1 z-20 w-28`}>
                               {isTenant ? (
-                                <>
-                                  <button
-                                    onClick={() => { setEditingId(msg.id); setEditText(msg.text); setMenuOpenId(null) }}
-                                    className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-2"
-                                  >
-                                    <Edit2 className="w-3.5 h-3.5" /> Edit
-                                  </button>
-                                  <button
-                                    onClick={() => unsendMessage(msg.id)}
-                                    className="w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50 flex items-center gap-2"
-                                  >
-                                    <X className="w-3.5 h-3.5" /> Unsend
-                                  </button>
-                                </>
+                                <button
+                                  onClick={() => unsendMessage(msg.id)}
+                                  className="w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50 flex items-center gap-2"
+                                >
+                                  <X className="w-3.5 h-3.5" /> Unsend
+                                </button>
                               ) : (
                                 <button
                                   onClick={() => { setCompose(`@${msg.senderName} `); setMenuOpenId(null); composeRef.current?.focus() }}
@@ -1415,16 +1396,27 @@ function TenantMessagesTab() {
           {attachments.length > 0 && (
             <div className="px-4 py-2 border-t border-gray-100 bg-white flex gap-2 flex-wrap shrink-0">
               {attachments.map((a, i) => (
-                <div key={i} className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-2.5 py-1.5 text-xs text-blue-700 font-medium">
-                  <Paperclip className="w-3 h-3" />
-                  <span className="max-w-[140px] truncate">{a.name}</span>
-                  <span className="text-blue-400">{a.size}</span>
-                  <button
-                    onClick={() => setAttachments((prev) => prev.filter((_, j) => j !== i))}
-                    className="text-blue-400 hover:text-blue-700 ml-0.5"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
+                <div key={i} className="relative group/att">
+                  {a.previewUrl ? (
+                    <div className="relative">
+                      <img src={a.previewUrl} className="w-16 h-16 rounded-xl object-cover border border-gray-200" alt={a.name} />
+                      <button
+                        onClick={() => setAttachments((prev) => prev.filter((_, j) => j !== i))}
+                        className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-gray-800 text-white rounded-full flex items-center justify-center opacity-0 group-hover/att:opacity-100 transition-opacity"
+                      >
+                        <X className="w-2.5 h-2.5" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-2.5 py-1.5 text-xs text-blue-700 font-medium">
+                      <Paperclip className="w-3 h-3" />
+                      <span className="max-w-[140px] truncate">{a.name}</span>
+                      <span className="text-blue-400">{a.size}</span>
+                      <button onClick={() => setAttachments((prev) => prev.filter((_, j) => j !== i))} className="text-blue-400 hover:text-blue-700 ml-0.5">
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -1439,7 +1431,7 @@ function TenantMessagesTab() {
                 ref={composeRef}
                 rows={1}
                 className="flex-1 bg-transparent text-sm outline-none placeholder-gray-400 resize-none leading-relaxed max-h-28 overflow-y-auto"
-                placeholder="Message BMP Central…"
+                placeholder={`Message ${companyName}…`}
                 value={compose}
                 onChange={(e) => {
                   setCompose(e.target.value)
@@ -1486,14 +1478,16 @@ function TenantMessagesTab() {
                 <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelect} />
                 <button
                   onClick={sendMessage}
-                  disabled={!compose.trim() && attachments.length === 0}
+                  disabled={sending || (!compose.trim() && attachments.length === 0)}
                   className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${
                     compose.trim() || attachments.length
                       ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm'
                       : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                   }`}
                 >
-                  <Send className="w-3.5 h-3.5" />
+                  {sending
+                    ? <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    : <Send className="w-3.5 h-3.5" />}
                 </button>
               </div>
             </div>
@@ -1513,13 +1507,28 @@ function TenantMessagesTab() {
 // ─── Documents Tab ────────────────────────────────────────────────────────────
 
 function TenantDocumentsTab() {
+  const { tenant, tenantId } = useContext(TenantCtx)
   const [previewDoc, setPreviewDoc] = useState<DocItem | null>(null)
+  const { data: realDocs, loading } = useDocuments(tenantId ?? undefined)
 
-  const docs: DocItem[] = [
-    { id: 'd-1', name: 'Lease Agreement — Unit 1A', type: 'Lease', date: 'Jan 1, 2026', size: '245 KB' },
-    { id: 'd-2', name: 'Move-In Inspection Report', type: 'Inspection', date: 'Jan 1, 2026', size: '118 KB' },
-    { id: 'd-3', name: 'June 2026 Rent Receipt', type: 'Receipt', date: 'Jun 1, 2026', size: '42 KB' },
+  // Sample documents shown in demo mode or before any real docs are uploaded
+  const sampleDocs: DocItem[] = [
+    { id: 'd-1', name: `Lease Agreement${tenant?.unit ? ` — Unit ${tenant.unit}` : ''}`, type: 'Lease', date: tenant?.moveIn || 'Jan 1, 2026', size: '245 KB' },
+    { id: 'd-2', name: 'Move-In Inspection Report', type: 'Inspection', date: tenant?.moveIn || 'Jan 1, 2026', size: '118 KB' },
+    { id: 'd-3', name: 'Latest Rent Receipt', type: 'Receipt', date: 'Jun 1, 2026', size: '42 KB' },
   ]
+
+  const docs: DocItem[] = realDocs.length > 0
+    ? realDocs.map((d) => ({ id: d.id, name: d.name, type: d.type, date: d.date, size: d.size }))
+    : sampleDocs
+
+  if (loading) {
+    return (
+      <div className="p-5 space-y-3">
+        {[0, 1, 2].map((i) => <div key={i} className="h-16 bg-gray-100 animate-pulse rounded-xl" />)}
+      </div>
+    )
+  }
 
   return (
     <div className="p-5">
@@ -1550,12 +1559,16 @@ function TenantDocumentsTab() {
 
 export default function TenantPortal() {
   const { data: tenant, tenantId, pmId, unitId } = useCurrentTenant()
+  const { companyName } = useBranding()
+  const { signOut } = useAuth()
+  const { demoMode } = useDemoMode()
   const [activeTab, setActiveTab] = useLocalState<Tab>('bmp_tenant_tab', 'overview')
   const [showMaintenanceModal, setShowMaintenanceModal] = useState(false)
 
   async function handleTicketSubmit(data: MaintenanceFormStep1 & MaintenanceFormStep2) {
+    if (demoMode) { showToast({ type: 'info', title: 'Demo mode — request not submitted' }); setShowMaintenanceModal(false); return }
     if (!tenantId || !pmId) return
-    await supabase.from('maintenance_requests').insert({
+    const { error } = await supabase.from('maintenance_requests').insert({
       pm_id: pmId,
       tenant_id: tenantId,
       unit_id: unitId,
@@ -1564,6 +1577,15 @@ export default function TenantPortal() {
       priority: (data.priority as 'low' | 'medium' | 'high' | 'emergency') || 'medium',
       status: 'open',
     })
+    if (!error) {
+      // Notify the property manager of the new request
+      notifyUser(pmId, {
+        type: 'maintenance',
+        title: 'New maintenance request',
+        body: `${tenant?.name ?? 'A tenant'} submitted "${data.title}"${tenant?.unit ? ` — Unit ${tenant.unit}` : ''}`,
+        link: '/admin',
+      })
+    }
     setShowMaintenanceModal(false)
   }
 
@@ -1578,65 +1600,150 @@ export default function TenantPortal() {
   const panelFullHeight = activeTab === 'messages'
 
   return (
+    <NotificationsProvider>
     <TenantCtx.Provider value={{ tenant, tenantId, pmId, unitId }}>
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200 px-5 py-4 flex items-center justify-between sticky top-0 z-30">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-blue-600 rounded-xl flex items-center justify-center">
-            <Building2 className="w-4 h-4 text-white" />
-          </div>
+    <div className="min-h-screen bg-gray-50 flex">
+
+      {/* ── Desktop sidebar ── */}
+      <aside className="hidden md:flex flex-col w-56 shrink-0 sticky top-0 h-screen overflow-y-auto" style={{ background: 'linear-gradient(180deg,#0F172A 0%,#1E293B 100%)', borderRight: '1px solid rgba(255,255,255,0.06)' }}>
+        {/* Logo */}
+        <div className="flex items-center gap-3 px-4 py-5" style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
+          <BrandLogo wrapperClassName="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 overflow-hidden" iconClassName="w-4 h-4 text-white" style={{ background: 'linear-gradient(135deg,#3B82F6 0%,#1D4ED8 100%)' }} />
           <div>
-            <p className="font-bold text-gray-900 text-sm">BMP Central</p>
-            <p className="text-xs text-gray-500">Tenant Portal</p>
+            <p className="text-white font-bold text-sm whitespace-nowrap tracking-tight">{companyName}</p>
+            <p className="text-slate-500 text-[11px] font-medium uppercase tracking-wide">Tenant Portal</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button className="w-8 h-8 rounded-xl bg-gray-50 hover:bg-gray-100 flex items-center justify-center relative transition-colors">
-            <Bell className="w-4 h-4 text-gray-500" />
-          </button>
-          <div className="w-8 h-8 rounded-xl bg-green-500 flex items-center justify-center text-white font-bold text-xs">
-            {tenant ? tenant.name.split(' ').map((p) => p[0]).join('').slice(0, 2).toUpperCase() : '…'}
-          </div>
+
+        {/* Welcome */}
+        <div className="px-4 pt-5 pb-3">
+          <p className="text-xs font-bold text-slate-600 uppercase tracking-widest mb-1">Welcome back</p>
+          <p className="text-sm font-semibold text-white truncate">{tenant?.name.split(' ')[0] ?? '…'}</p>
+          <p className="text-xs text-slate-500 truncate">{tenant ? `${tenant.property} · Unit ${tenant.unit}` : ''}</p>
         </div>
-      </header>
 
-      {/* Welcome strip */}
-      <div className="bg-white border-b border-gray-100 px-5 py-3">
-        <p className="text-sm font-semibold text-gray-900">{tenant ? `Good morning, ${tenant.name.split(' ')[0]}` : 'Loading…'}</p>
-        <p className="text-xs text-gray-500">{tenant ? `${tenant.property} · Unit ${tenant.unit}` : ''}</p>
-      </div>
+        {/* Nav */}
+        <nav className="flex-1 px-3 space-y-0.5 mt-1">
+          {tabs.map((tab) => {
+            const isActive = activeTab === tab.id
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-150 text-left ${
+                  isActive ? 'text-white shadow-md' : 'text-slate-400 hover:text-white hover:bg-white/[0.06]'
+                }`}
+                style={isActive ? { background: 'linear-gradient(135deg,#3B82F6 0%,#2563EB 100%)', boxShadow: '0 4px 12px rgba(59,130,246,0.35)' } : {}}
+              >
+                <span className="shrink-0">{tab.icon}</span>
+                <span className="text-sm font-medium">{tab.label}</span>
+              </button>
+            )
+          })}
+        </nav>
 
-      {/* Tabs */}
-      <div className="bg-white border-b-2 border-gray-200 px-4 sticky top-[73px] z-20 shadow-sm">
-        <div className="flex overflow-x-auto">
-          {tabs.map((tab) => (
+        {/* Profile + sign out */}
+        <div className="mx-3 mb-4 mt-3 rounded-xl p-3" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)' }}>
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-white font-bold text-xs ring-2 ring-blue-500/40" style={{ background: 'linear-gradient(135deg,#3B82F6,#1D4ED8)' }}>
+              {tenant ? tenant.name.split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase() : '…'}
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-white truncate">{tenant?.name ?? '…'}</p>
+              <p className="text-[11px] text-slate-500">Tenant</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <NotificationBell align="left" />
             <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-5 py-4 text-sm font-semibold whitespace-nowrap border-b-2 -mb-0.5 transition-all ${
-                activeTab === tab.id
-                  ? 'border-blue-600 text-blue-600 bg-blue-50/50'
-                  : 'border-transparent text-gray-500 hover:text-gray-800 hover:bg-gray-50'
-              }`}
+              onClick={async () => { await signOut() }}
+              className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-red-400 hover:bg-white/5 transition-colors"
             >
-              <span className={activeTab === tab.id ? 'text-blue-600' : 'text-gray-400'}>{tab.icon}</span>
-              {tab.label}
+              <LogOut className="w-3.5 h-3.5" /> Sign out
             </button>
-          ))}
+          </div>
         </div>
-      </div>
+      </aside>
 
-      {/* Content */}
-      <div
-        className={`flex-1 ${panelFullHeight ? 'flex flex-col overflow-hidden' : 'overflow-y-auto'}`}
-        style={panelFullHeight ? { height: 'calc(100vh - 148px)' } : {}}
-      >
-        {activeTab === 'overview' && <OverviewTab onNewTicket={() => setShowMaintenanceModal(true)} />}
-        {activeTab === 'maintenance' && <MaintenanceListTab onNew={() => setShowMaintenanceModal(true)} />}
-        {activeTab === 'payments' && <PaymentsTab />}
-        {activeTab === 'messages' && <TenantMessagesTab />}
-        {activeTab === 'documents' && <TenantDocumentsTab />}
+      {/* ── Mobile + desktop main area ── */}
+      <div className="flex-1 flex flex-col min-w-0">
+
+        {/* Mobile header (hidden on desktop) */}
+        <header className="md:hidden bg-white border-b border-gray-200 px-5 py-4 flex items-center justify-between sticky top-0 z-30">
+          <div className="flex items-center gap-3">
+            <BrandLogo wrapperClassName="w-8 h-8 bg-blue-600 rounded-xl flex items-center justify-center overflow-hidden" iconClassName="w-4 h-4 text-white" />
+            <div>
+              <p className="font-bold text-gray-900 text-sm">{companyName}</p>
+              <p className="text-xs text-gray-500">Tenant Portal</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <NotificationBell align="right" />
+            <button
+              onClick={async () => { await signOut() }}
+              className="flex items-center gap-2 pl-2 pr-3 py-1 rounded-full border border-gray-200 hover:border-red-200 hover:bg-red-50 transition-all"
+            >
+              <div className="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center text-white font-bold text-[10px]">
+                {tenant ? tenant.name.split(' ').map((p) => p[0]).join('').slice(0, 2).toUpperCase() : '…'}
+              </div>
+              <span className="text-xs font-semibold text-gray-700">{tenant ? tenant.name.split(' ')[0] : 'Me'}</span>
+            </button>
+          </div>
+        </header>
+
+        {/* Mobile welcome strip (hidden on desktop) */}
+        <div className="md:hidden bg-white border-b border-gray-100 px-5 py-3">
+          <p className="text-sm font-semibold text-gray-900">{tenant ? `Good morning, ${tenant.name.split(' ')[0]}` : 'Loading…'}</p>
+          <p className="text-xs text-gray-500">{tenant ? `${tenant.property} · Unit ${tenant.unit}` : ''}</p>
+        </div>
+
+        {/* Desktop topbar (hidden on mobile) */}
+        <header className="hidden md:flex bg-white border-b border-gray-200 px-6 h-[60px] items-center justify-between shrink-0 shadow-sm sticky top-0 z-30">
+          <div>
+            <h1 className="text-base font-bold text-gray-900 capitalize">
+              {tabs.find(t => t.id === activeTab)?.label ?? 'Portal'}
+            </h1>
+            <p className="text-xs text-gray-500">{tenant ? `${tenant.property} · Unit ${tenant.unit}` : ''}</p>
+          </div>
+          <div className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+            <div className="w-7 h-7 rounded-full bg-green-500 flex items-center justify-center text-white font-bold text-[10px]">
+              {tenant ? tenant.name.split(' ').map((p) => p[0]).join('').slice(0, 2).toUpperCase() : '…'}
+            </div>
+            {tenant?.name ?? '…'}
+          </div>
+        </header>
+
+        {/* Mobile tab bar (hidden on desktop) */}
+        <div className="md:hidden bg-white border-b-2 border-gray-200 px-4 sticky top-[73px] z-20 shadow-sm">
+          <div className="flex overflow-x-auto">
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center gap-2 px-5 py-4 text-sm font-semibold whitespace-nowrap border-b-2 -mb-0.5 transition-all ${
+                  activeTab === tab.id
+                    ? 'border-blue-600 text-blue-600 bg-blue-50/50'
+                    : 'border-transparent text-gray-500 hover:text-gray-800 hover:bg-gray-50'
+                }`}
+              >
+                <span className={activeTab === tab.id ? 'text-blue-600' : 'text-gray-400'}>{tab.icon}</span>
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Content */}
+        <div
+          className={`flex-1 ${panelFullHeight ? 'flex flex-col overflow-hidden' : 'overflow-y-auto'}`}
+          style={panelFullHeight ? { height: 'calc(100vh - 60px)' } : {}}
+        >
+          {activeTab === 'overview' && <OverviewTab onNewTicket={() => setShowMaintenanceModal(true)} />}
+          {activeTab === 'maintenance' && <MaintenanceListTab onNew={() => setShowMaintenanceModal(true)} />}
+          {activeTab === 'payments' && <PaymentsTab />}
+          {activeTab === 'messages' && <TenantMessagesTab />}
+          {activeTab === 'documents' && <TenantDocumentsTab />}
+        </div>
       </div>
 
       {/* Maintenance Modal */}
@@ -1648,5 +1755,6 @@ export default function TenantPortal() {
       )}
     </div>
     </TenantCtx.Provider>
+    </NotificationsProvider>
   )
 }

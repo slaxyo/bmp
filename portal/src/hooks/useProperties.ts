@@ -12,12 +12,12 @@ function fmtDate(iso: string | null): string {
 function transform(row: Record<string, unknown>): Property {
   const units = (row.units as Record<string, unknown>[] | null) ?? []
 
-  const allTenants = units.flatMap((u) => {
+  const allTenants: Record<string, unknown>[] = units.flatMap((u) => {
     const ts = (u.tenants as Record<string, unknown>[]) ?? []
     return ts.map((t) => ({ ...t, unit_number: u.unit_number }))
   })
 
-  const allTickets = units.flatMap((u) =>
+  const allTickets: Record<string, unknown>[] = units.flatMap((u) =>
     (u.maintenance_requests as Record<string, unknown>[]) ?? []
   )
 
@@ -27,7 +27,7 @@ function transform(row: Record<string, unknown>): Property {
     address: (row.address as string) ?? '',
     city: (row.city as string) ?? '',
     units: units.length,
-    occupied: allTenants.filter((t) => t.status !== 'notice').length,
+    occupied: allTenants.filter((t) => t.status !== 'notice' && t.status !== 'past').length,
     monthlyIncome: allTenants.reduce((sum, t) => sum + ((t.monthly_rent as number) ?? 0), 0),
     openTickets: allTickets.filter((t) => t.status !== 'resolved').length,
     tenants: allTenants.map((t) => ({
