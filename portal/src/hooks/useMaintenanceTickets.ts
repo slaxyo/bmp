@@ -16,13 +16,20 @@ function transform(row: Record<string, unknown>): MaintenanceTicket {
     tenantName: (tenant?.name as string) ?? '',
     unit: (unit?.unit_number as string) ?? '',
     property: (property?.name as string) ?? '',
-    category: 'General',
+    category: (row.category as string) ?? 'General',
     title: row.title as string,
     description: (row.description as string) ?? '',
     priority: (row.priority as MaintenanceTicket['priority']) ?? 'medium',
     status: (row.status as MaintenanceTicket['status']) ?? 'open',
     createdAt: row.created_at ? fmt(row.created_at as string) : '',
+    createdAtIso: (row.created_at as string) ?? undefined,
     updatedAt: row.updated_at ? fmt(row.updated_at as string) : '',
+    assignedTo: (row.assigned_to as string | null) ?? null,
+    vendorName: (row.vendor_name as string | null) ?? null,
+    vendorPhone: (row.vendor_phone as string | null) ?? null,
+    estimatedCost: (row.estimated_cost as number | null) ?? null,
+    actualCost: (row.actual_cost as number | null) ?? null,
+    photos: (row.photos as string[] | null) ?? [],
   }
 }
 

@@ -12,17 +12,17 @@
   </head>
   <body>
 
-    <!-- ============================== ANNOUNCEMENT BAR ============================== -->
+    <!-- ============================== ANNOUNCE BAR ============================== -->
     <div class="announce-bar">
-      <span class="ab-msg">Build your custom property portal &mdash; launch in 2 weeks</span>
+      <span class="ab-msg">Introductory offer: 40% off the build fee for the first 5 clients</span>
       <div class="ab-mid">
-        <div class="ab-check">
+        <span class="ab-check">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
           No technical setup required
-        </div>
-        <a href="#contact" class="ab-pill">Get Started &rarr;</a>
+        </span>
+        <a href="#contact" class="ab-pill">Claim offer &rarr;</a>
       </div>
-      <a href="#contact" class="ab-login">Log in</a>
+      <a href="https://bmp-portal.vercel.app" class="ab-login">Client login &rarr;</a>
     </div>
 
     <!-- ============================== NAV ============================== -->
@@ -35,12 +35,28 @@
         <nav class="nav-links">
           <a href="#why">Why BMP</a>
           <a href="#product">Product</a>
+          <a href="#testimonials">Reviews</a>
           <a href="#pricing">Pricing</a>
           <a href="#faq">FAQ</a>
         </nav>
         <div class="nav-actions">
-          <a class="btn-nav-solid" href="demo.html">Request a Demo</a>
+          <a class="btn-nav-ghost" href="https://bmp-portal.vercel.app">Log in</a>
+          <a class="btn-nav-solid" href="#contact">Request a demo</a>
         </div>
+        <!-- Mobile hamburger -->
+        <button class="nav-burger" id="navBurger" aria-label="Open menu">
+          <span></span><span></span><span></span>
+        </button>
+      </div>
+      <!-- Mobile menu -->
+      <div class="nav-mobile" id="navMobile">
+        <a href="#why">Why BMP</a>
+        <a href="#product">Product</a>
+        <a href="#testimonials">Reviews</a>
+        <a href="#pricing">Pricing</a>
+        <a href="#faq">FAQ</a>
+        <a href="https://bmp-portal.vercel.app" class="nm-login">Log in</a>
+        <a href="#contact" class="nm-cta">Request a demo</a>
       </div>
     </header>
 
@@ -48,25 +64,31 @@
 
       <!-- ============================== HERO ============================== -->
       <section class="s-hero">
+        <div class="hero-inner">
 
-        <!-- Centered headline + copy -->
-        <div class="hero-center">
+          <!-- Badge -->
+          <div class="hero-badge">
+            <span class="badge-dot"></span>
+            Now serving independent property managers across the US
+          </div>
 
           <h1>
-            Your properties deserve<br>
-            <span class="hero-rotate-wrap">
-              <span class="hero-rotate" id="heroRotate"><span id="heroTyped"></span><span class="hero-cursor"></span></span>
+            Your portfolio.<br>
+            <span class="hero-highlight">
+              <span id="heroTyped"></span><span class="hero-cursor"></span>
             </span>
           </h1>
 
           <p class="hero-sub">
             We build custom management portals for independent property managers —
-            replacing the email chains, spreadsheets, and missed calls slowing your business down.
+            a tenant portal, owner dashboard, and PM command center — delivered in under two weeks, fixed price.
           </p>
 
-          <a class="btn-hero-main" href="demo.html">Request a Demo</a>
+          <div class="hero-btns">
+            <a class="btn-hero-main" href="#contact">Request a free demo</a>
+            <a class="btn-hero-ghost" href="#product">See how it works &darr;</a>
+          </div>
 
-          <!-- Social proof -->
           <div class="trust-proof">
             <div class="tp-stars">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="#f59e0b" stroke="none"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
@@ -75,118 +97,140 @@
               <svg width="14" height="14" viewBox="0 0 24 24" fill="#f59e0b" stroke="none"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="#f59e0b" stroke="none"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
             </div>
-            <span class="tp-rating">5.0 rating</span>
-            <span class="tp-div">|</span>
+            <span class="tp-rating">5.0</span>
+            <span class="tp-sep">·</span>
             <div class="tp-avatars">
               <div class="tp-av" style="background:#2563eb;">J</div>
               <div class="tp-av" style="background:#7c3aed;">M</div>
               <div class="tp-av" style="background:#059669;">S</div>
+              <div class="tp-av" style="background:#dc2626;">A</div>
             </div>
-            <span class="tp-text">Delivered in under 2 weeks &nbsp;&middot;&nbsp; Fixed price &nbsp;&middot;&nbsp; No technical setup</span>
+            <span class="tp-text">Trusted by independent PMs &nbsp;·&nbsp; Fixed price &nbsp;·&nbsp; Live in 2 weeks</span>
           </div>
-
         </div>
 
-        <!-- Dashboard snapshot below headline -->
-        <div class="hero-snapshot">
+        <!-- Dashboard mockup -->
+        <div class="hero-mockup">
           <div class="browser">
             <div class="win-bar">
               <div class="win-dots">
-                <span class="wd wd-r"></span>
-                <span class="wd wd-y"></span>
-                <span class="wd wd-g"></span>
+                <span class="wd wd-r"></span><span class="wd wd-y"></span><span class="wd wd-g"></span>
               </div>
-              <div class="win-url">bmpcentral.com/admin</div>
-              <div class="win-actions">
-                <div class="win-btn-stub"></div>
-                <div class="win-btn-stub"></div>
-              </div>
+              <div class="win-url">portal.yourbrand.com/admin</div>
+              <div class="win-actions"><div class="win-btn-stub"></div><div class="win-btn-stub"></div></div>
             </div>
             <div class="win-body">
               <aside class="app-sidebar">
-                <div class="app-logo">BC</div>
+                <div class="app-logo">PM</div>
                 <nav class="app-nav">
                   <div class="ani ani-active" title="Dashboard">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
                   </div>
                   <div class="ani" title="Properties">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>
                   </div>
                   <div class="ani" title="Tenants">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
                   </div>
                   <div class="ani" title="Maintenance">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>
                   </div>
                   <div class="ani" title="Messages">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+                    <span class="ani-badge">3</span>
                   </div>
                 </nav>
               </aside>
               <div class="app-main">
                 <div class="app-top">
                   <div>
-                    <div class="at-title">PM Dashboard</div>
-                    <div class="at-sub">Welcome back, Admin</div>
+                    <div class="at-title">Dashboard</div>
+                    <div class="at-sub">Thursday, Jun 26 &nbsp;·&nbsp; All systems normal</div>
                   </div>
-                  <div class="at-av">A</div>
+                  <div style="display:flex;align-items:center;gap:8px;">
+                    <div class="at-notif">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0"/></svg>
+                      <span class="at-notif-dot"></span>
+                    </div>
+                    <div class="at-av">A</div>
+                  </div>
                 </div>
                 <div class="app-kpis">
                   <div class="ak">
-                    <span class="ak-v">3</span>
-                    <span class="ak-l">Properties</span>
+                    <span class="ak-v ak-v-green">94%</span>
+                    <span class="ak-l">Occupancy</span>
                   </div>
                   <div class="ak">
-                    <span class="ak-v">11<small>/12</small></span>
-                    <span class="ak-l">Occupied</span>
+                    <span class="ak-v ak-v-blue">$17,200</span>
+                    <span class="ak-l">Rent MTD</span>
                   </div>
-                  <div class="ak ak--blue">
-                    <span class="ak-v">$14,400</span>
-                    <span class="ak-l">Monthly revenue</span>
-                  </div>
-                  <div class="ak ak--amber">
-                    <span class="ak-v">2</span>
+                  <div class="ak">
+                    <span class="ak-v ak-v-amber">3</span>
                     <span class="ak-l">Open tickets</span>
                   </div>
+                  <div class="ak">
+                    <span class="ak-v ak-v-purple">2</span>
+                    <span class="ak-l">Renewals due</span>
+                  </div>
                 </div>
-                <div class="app-lbl">Recent activity</div>
-                <div class="app-feed">
-                  <div class="af-row">
-                    <span class="af-dot d-amber"></span>
-                    <div class="af-body">
-                      <span class="af-t">Unit 4B &mdash; Maintenance request</span>
-                      <span class="af-s">Plumbing &middot; 2 hours ago</span>
+                <div class="app-cols">
+                  <div class="app-col-left">
+                    <div class="app-lbl">Maintenance queue</div>
+                    <div class="app-feed">
+                      <div class="af-row">
+                        <span class="af-dot d-red"></span>
+                        <div class="af-body"><span class="af-t">Unit 4B — AC failure</span><span class="af-s">Emergency · 1h ago</span></div>
+                        <span class="af-badge b-urgent">Urgent</span>
+                      </div>
+                      <div class="af-row">
+                        <span class="af-dot d-amber"></span>
+                        <div class="af-body"><span class="af-t">Unit 2A — Plumbing leak</span><span class="af-s">High · 5h ago</span></div>
+                        <span class="af-badge b-open">Open</span>
+                      </div>
+                      <div class="af-row">
+                        <span class="af-dot d-blue"></span>
+                        <div class="af-body"><span class="af-t">Unit 7C — Door lock</span><span class="af-s">Medium · Yesterday</span></div>
+                        <span class="af-badge b-wip">In progress</span>
+                      </div>
                     </div>
-                    <span class="af-badge b-open">Open</span>
                   </div>
-                  <div class="af-row">
-                    <span class="af-dot d-blue"></span>
-                    <div class="af-body">
-                      <span class="af-t">Sarah Mitchell &mdash; Rent paid</span>
-                      <span class="af-s">$1,450 &middot; June 1</span>
+                  <div class="app-col-right">
+                    <div class="app-lbl">Delinquent</div>
+                    <div class="delinq-list">
+                      <div class="dq-row">
+                        <div class="dq-av">R</div>
+                        <div class="dq-info"><span class="dq-name">Rodriguez, M.</span><span class="dq-meta">Unit 3A · $1,450</span></div>
+                        <span class="dq-days">8d</span>
+                      </div>
+                      <div class="dq-row">
+                        <div class="dq-av" style="background:#7c3aed;">K</div>
+                        <div class="dq-info"><span class="dq-name">Kim, J.</span><span class="dq-meta">Unit 6B · $1,800</span></div>
+                        <span class="dq-days">3d</span>
+                      </div>
                     </div>
-                    <span class="af-badge b-paid">Paid</span>
-                  </div>
-                  <div class="af-row">
-                    <span class="af-dot d-green"></span>
-                    <div class="af-body">
-                      <span class="af-t">Unit 7A &mdash; Lease renewed</span>
-                      <span class="af-s">12-month term &middot; May 30</span>
+                    <div class="app-lbl" style="margin-top:10px;">Recent activity</div>
+                    <div class="mini-feed">
+                      <div class="mf-row"><span class="mf-dot" style="background:#16a34a;"></span><span>Sarah M. — rent paid $1,600</span></div>
+                      <div class="mf-row"><span class="mf-dot" style="background:#2563eb;"></span><span>Lease renewed — Unit 1A, 12mo</span></div>
                     </div>
-                    <span class="af-badge b-done">Done</span>
                   </div>
                 </div>
               </div>
             </div>
           </div>
 
+          <!-- Floating pills -->
           <div class="float-pill fp-tl">
-            <span class="fp-dot"></span>
-            Maintenance request submitted
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="3"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            New maintenance request · Unit 4B
           </div>
           <div class="float-pill fp-br">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
-            $14,400 rent collected
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+            $17,200 rent collected this month
+          </div>
+          <div class="float-pill fp-mr">
+            <span class="fp-live-dot"></span>
+            3 tenants online now
           </div>
         </div>
 
@@ -203,8 +247,8 @@
           </div>
           <span class="ks-div"></span>
           <div class="ks-item">
-            <span class="ks-v">3 logins</span>
-            <span class="ks-l">Tenant &middot; Owner &middot; PM</span>
+            <span class="ks-v">3 portals</span>
+            <span class="ks-l">Tenant · Owner · PM</span>
           </div>
           <span class="ks-div"></span>
           <div class="ks-item">
@@ -215,377 +259,560 @@
 
       </section>
 
-      <!-- LOGO STRIP -->
+      <!-- ============================== LOGO STRIP ============================== -->
       <section class="s-logos">
         <p class="logos-eyebrow">Trusted by independent property managers</p>
-        <div class="logos-row">
-          <span class="logo-item">SkyView Properties</span>
-          <span class="logos-sep">&middot;</span>
-          <span class="logo-item">Harbor PM</span>
-          <span class="logos-sep">&middot;</span>
-          <span class="logo-item">Atlas Management</span>
-          <span class="logos-sep">&middot;</span>
-          <span class="logo-item">Westfield Realty</span>
-          <span class="logos-sep">&middot;</span>
-          <span class="logo-item">CoreProperty</span>
-          <span class="logos-sep">&middot;</span>
-          <span class="logo-item">Summit PM</span>
-          <span class="logos-sep">&middot;</span>
-          <span class="logo-item">Elm Street Realty</span>
+        <div class="logos-track">
+          <div class="logos-row">
+            <span class="logo-item">SkyView Properties</span>
+            <span class="logo-sep">·</span>
+            <span class="logo-item">Harbor PM</span>
+            <span class="logo-sep">·</span>
+            <span class="logo-item">Atlas Management</span>
+            <span class="logo-sep">·</span>
+            <span class="logo-item">Westfield Realty</span>
+            <span class="logo-sep">·</span>
+            <span class="logo-item">CoreProperty</span>
+            <span class="logo-sep">·</span>
+            <span class="logo-item">Summit PM</span>
+            <span class="logo-sep">·</span>
+            <span class="logo-item">Elm Street Realty</span>
+            <span class="logo-sep">·</span>
+            <span class="logo-item">Riverdale Group</span>
+            <span class="logo-sep">·</span>
+            <!-- Duplicate for seamless loop -->
+            <span class="logo-item">SkyView Properties</span>
+            <span class="logo-sep">·</span>
+            <span class="logo-item">Harbor PM</span>
+            <span class="logo-sep">·</span>
+            <span class="logo-item">Atlas Management</span>
+            <span class="logo-sep">·</span>
+            <span class="logo-item">Westfield Realty</span>
+            <span class="logo-sep">·</span>
+            <span class="logo-item">CoreProperty</span>
+            <span class="logo-sep">·</span>
+            <span class="logo-item">Summit PM</span>
+            <span class="logo-sep">·</span>
+            <span class="logo-item">Elm Street Realty</span>
+            <span class="logo-sep">·</span>
+            <span class="logo-item">Riverdale Group</span>
+          </div>
         </div>
       </section>
 
-      <!-- ============================== CHAOS ============================== -->
+      <!-- ============================== PROBLEM (WHY) ============================== -->
       <section class="s-chaos" id="why">
+        <div class="section-inner">
+          <div class="chaos-head">
+            <div class="chaos-eyebrow"><span class="chaos-live"></span> The problem</div>
+            <h2>Six tools.<br>Still dropping the ball.</h2>
+            <p class="chaos-sub">The average independent PM juggles email, text, spreadsheets, and two or three software subscriptions — and still misses things. There's a better way.</p>
+          </div>
 
-        <div class="chaos-head">
-          <div class="chaos-eyebrow"><span class="chaos-live"></span> The problem</div>
-          <h2 class="chaos-h2">Six apps.<br>Still dropping the ball.</h2>
+          <div class="kn-grid">
+            <div class="kn-card">
+              <div class="kn-app"><div class="kn-icon ki-gmail"><svg width="22" height="22" viewBox="0 0 20 20" fill="white"><path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z"/><path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z"/></svg></div><span>Gmail</span></div>
+              <div class="kn-num">47</div>
+              <div class="kn-unit">unread tenant emails</div>
+            </div>
+            <div class="kn-card">
+              <div class="kn-app"><div class="kn-icon ki-sheets"><svg width="22" height="22" viewBox="0 0 20 20" fill="white"><path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clip-rule="evenodd"/></svg></div><span>Google Sheets</span></div>
+              <div class="kn-num">3 wks</div>
+              <div class="kn-unit">out of date</div>
+            </div>
+            <div class="kn-card">
+              <div class="kn-app"><div class="kn-icon ki-sms"><svg width="22" height="22" viewBox="0 0 20 20" fill="white"><path fill-rule="evenodd" d="M18 5v8a2 2 0 01-2 2h-5l-5 4v-4H4a2 2 0 01-2-2V5a2 2 0 012-2h12a2 2 0 012 2zM7 8H5v2h2V8zm2 0h2v2H9V8zm6 0h-2v2h2V8z" clip-rule="evenodd"/></svg></div><span>Text Messages</span></div>
+              <div class="kn-num">11</div>
+              <div class="kn-unit">tenant texts today</div>
+            </div>
+            <div class="kn-card">
+              <div class="kn-app"><div class="kn-icon ki-phone"><svg width="22" height="22" viewBox="0 0 20 20" fill="white"><path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z"/></svg></div><span>Phone Calls</span></div>
+              <div class="kn-num">5</div>
+              <div class="kn-unit">missed calls today</div>
+            </div>
+            <div class="kn-card">
+              <div class="kn-app"><div class="kn-icon ki-appfolio"><svg width="22" height="22" viewBox="0 0 20 20" fill="white"><path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"/></svg></div><span>PM Software</span></div>
+              <div class="kn-num">$350</div>
+              <div class="kn-unit">per month, barely used</div>
+            </div>
+            <div class="kn-card">
+              <div class="kn-app"><div class="kn-icon ki-wa"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg></div><span>WhatsApp</span></div>
+              <div class="kn-num">3</div>
+              <div class="kn-unit">tenant group chats</div>
+            </div>
+          </div>
+
+          <div class="chaos-arrow">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>
+            <span>There's a better way</span>
+          </div>
         </div>
-
-        <div class="kn-grid">
-
-          <div class="kn-card">
-            <div class="kn-app">
-              <div class="kn-icon ki-gmail">
-                <svg width="24" height="24" viewBox="0 0 20 20" fill="white"><path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z"/><path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z"/></svg>
-              </div>
-              <span>Gmail</span>
-            </div>
-            <div class="kn-num">47<span class="kn-dot"></span></div>
-            <div class="kn-unit">unread emails</div>
-          </div>
-
-          <div class="kn-card">
-            <div class="kn-app">
-              <div class="kn-icon ki-sheets">
-                <svg width="24" height="24" viewBox="0 0 20 20" fill="white"><path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clip-rule="evenodd"/></svg>
-              </div>
-              <span>Google Sheets</span>
-            </div>
-            <div class="kn-num">3<span class="kn-dot"></span></div>
-            <div class="kn-unit">weeks out of date</div>
-          </div>
-
-          <div class="kn-card">
-            <div class="kn-app">
-              <div class="kn-icon ki-sms">
-                <svg width="24" height="24" viewBox="0 0 20 20" fill="white"><path fill-rule="evenodd" d="M18 5v8a2 2 0 01-2 2h-5l-5 4v-4H4a2 2 0 01-2-2V5a2 2 0 012-2h12a2 2 0 012 2zM7 8H5v2h2V8zm2 0h2v2H9V8zm6 0h-2v2h2V8z" clip-rule="evenodd"/></svg>
-              </div>
-              <span>Text Messages</span>
-            </div>
-            <div class="kn-num">11<span class="kn-dot"></span></div>
-            <div class="kn-unit">tenant texts today</div>
-          </div>
-
-          <div class="kn-card">
-            <div class="kn-app">
-              <div class="kn-icon ki-phone">
-                <svg width="24" height="24" viewBox="0 0 20 20" fill="white"><path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z"/></svg>
-              </div>
-              <span>Phone Calls</span>
-            </div>
-            <div class="kn-num">5<span class="kn-dot"></span></div>
-            <div class="kn-unit">missed calls</div>
-          </div>
-
-          <div class="kn-card">
-            <div class="kn-app">
-              <div class="kn-icon ki-appfolio">
-                <svg width="24" height="24" viewBox="0 0 20 20" fill="white"><path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"/></svg>
-              </div>
-              <span>PM Software</span>
-            </div>
-            <div class="kn-num">$350<span class="kn-dot"></span></div>
-            <div class="kn-unit">per month</div>
-          </div>
-
-          <div class="kn-card">
-            <div class="kn-app">
-              <div class="kn-icon ki-wa">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>
-              </div>
-              <span>WhatsApp</span>
-            </div>
-            <div class="kn-num">3<span class="kn-dot"></span></div>
-            <div class="kn-unit">separate group chats</div>
-          </div>
-
-        </div>
-
       </section>
 
-      <!-- ============================== PRODUCT ============================== -->
-      <section class="section s-features" id="product">
-        <h2 class="feat-h2">Tired of managing your portfolio<br><em>across six different tools?</em></h2>
+      <!-- ============================== PRODUCT TABS ============================== -->
+      <section class="s-product section-inner" id="product">
+        <div class="prod-head">
+          <div class="s-eyebrow">The solution</div>
+          <h2>One portal. Three views.<br>Total visibility.</h2>
+          <p class="prod-sub">BMP Central gives every stakeholder exactly what they need — nothing more, nothing less.</p>
+        </div>
 
-        <div class="bento">
+        <div class="prod-tabs">
+          <button class="ptab ptab-active" data-tab="pm">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+            PM Admin
+          </button>
+          <button class="ptab" data-tab="tenant">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+            Tenant Portal
+          </button>
+          <button class="ptab" data-tab="owner">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>
+            Owner Dashboard
+          </button>
+        </div>
 
-          <!-- Large card: Tenant portal -->
-          <div class="bc bc-large">
-            <div class="bc-text">
-              <h3>Tenant portal</h3>
-              <p>Tenants log in to submit maintenance requests, check rent status, view lease documents, and message the PM — without ever texting you directly.</p>
-              <ul class="bc-list">
-                <li>Rent status and payment confirmation</li>
-                <li>One-click maintenance request form</li>
-                <li>Lease document viewer and download</li>
-                <li>Direct messaging with the PM</li>
+        <div class="prod-panels">
+
+          <!-- PM Admin Panel -->
+          <div class="prod-panel prod-panel-active" data-panel="pm">
+            <div class="prod-desc">
+              <h3>Your command center</h3>
+              <p>Everything across all your properties in one dense, fast view. Delinquent tenants, maintenance queue, lease renewals, and recent activity — without switching apps.</p>
+              <ul class="feat-list">
+                <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg> KPI dashboard: occupancy, rent MTD, open tickets</li>
+                <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg> Tenant profiles, lease management, payment ledger</li>
+                <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg> Maintenance queue with priority and SLA tracking</li>
+                <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg> In-app messaging — no more tenant texts</li>
+                <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg> Document storage: leases, notices, inspection reports</li>
               </ul>
             </div>
-            <div class="bc-chat-wrap">
-              <div class="bc-chat">
-                <div class="bcc-row">
-                  <div class="bcc-av bcc-av-t">T</div>
-                  <div class="bcc-bubble bcc-bubble-in">The heater in unit 3B stopped working &#x1F976;</div>
+            <div class="prod-preview prod-preview-pm">
+              <div class="pp-bar">
+                <div class="win-dots"><span class="wd wd-r"></span><span class="wd wd-y"></span><span class="wd wd-g"></span></div>
+                <div class="win-url">portal.yourco.com/admin</div>
+              </div>
+              <div class="pp-body pp-body-dark">
+                <div class="pp-kpis">
+                  <div class="pp-k"><span class="ppk-v green">94%</span><span class="ppk-l">Occupancy</span></div>
+                  <div class="pp-k"><span class="ppk-v blue">$17.2k</span><span class="ppk-l">Rent MTD</span></div>
+                  <div class="pp-k"><span class="ppk-v amber">3</span><span class="ppk-l">Tickets</span></div>
+                  <div class="pp-k"><span class="ppk-v purple">2</span><span class="ppk-l">Renewals</span></div>
                 </div>
-                <div class="bcc-row bcc-out">
-                  <div class="bcc-av bcc-av-pm">PM</div>
-                  <div class="bcc-bubble bcc-bubble-out">On it! Ticket #234 created. Contractor visits tomorrow 10am&ndash;2pm.</div>
+                <div class="pp-section-lbl">Maintenance queue</div>
+                <div class="pp-rows">
+                  <div class="pp-row"><span class="pp-dot red"></span><span class="pp-rt">Unit 4B — AC failure</span><span class="pp-tag tag-urgent">Emergency</span></div>
+                  <div class="pp-row"><span class="pp-dot amber"></span><span class="pp-rt">Unit 2A — Plumbing</span><span class="pp-tag tag-open">Open</span></div>
+                  <div class="pp-row"><span class="pp-dot blue"></span><span class="pp-rt">Unit 7C — Lock</span><span class="pp-tag tag-wip">WIP</span></div>
                 </div>
-                <div class="bcc-row">
-                  <div class="bcc-av bcc-av-t">T</div>
-                  <div class="bcc-bubble bcc-bubble-in">Amazing, thank you! &#x1F64F;</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tenant Portal Panel -->
+          <div class="prod-panel" data-panel="tenant">
+            <div class="prod-desc">
+              <h3>Tenants love it</h3>
+              <p>Give tenants a professional place to submit requests, see rent status, download documents, and message you — so they stop texting your personal number.</p>
+              <ul class="feat-list">
+                <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg> Submit maintenance requests with photos</li>
+                <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg> View rent balance, payment history, and due dates</li>
+                <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg> Download lease and notices any time</li>
+                <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg> Secure in-app messaging with the PM</li>
+                <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg> Mobile-friendly — works great on any device</li>
+              </ul>
+            </div>
+            <div class="prod-preview">
+              <div class="pp-bar">
+                <div class="win-dots"><span class="wd wd-r"></span><span class="wd wd-y"></span><span class="wd wd-g"></span></div>
+                <div class="win-url">portal.yourco.com/tenant</div>
+              </div>
+              <div class="pp-body">
+                <div class="pp-greeting">Good morning, Sarah 👋</div>
+                <div class="pp-rent-card">
+                  <div class="prc-row"><span class="prc-l">Rent due</span><span class="prc-v prc-green">Paid ✓</span></div>
+                  <div class="prc-row"><span class="prc-l">Amount</span><span class="prc-v">$1,600</span></div>
+                  <div class="prc-row"><span class="prc-l">Next due</span><span class="prc-v">Jul 1</span></div>
                 </div>
-                <div class="bcc-tag">Ticket #234 &nbsp;&middot;&nbsp; Auto-created &nbsp;&middot;&nbsp; Open</div>
+                <div class="pp-section-lbl">My requests</div>
+                <div class="pp-rows">
+                  <div class="pp-row"><span class="pp-dot amber"></span><span class="pp-rt">Heater not working</span><span class="pp-tag tag-open">Open</span></div>
+                  <div class="pp-row"><span class="pp-dot green"></span><span class="pp-rt">Broken blinds</span><span class="pp-tag tag-done">Resolved</span></div>
+                </div>
+                <button class="pp-btn">+ New request</button>
               </div>
             </div>
           </div>
 
-          <!-- Medium card: Owner dashboard -->
-          <div class="bc bc-medium">
-            <h3>Owner dashboard</h3>
-            <p>Owners get real-time visibility into their portfolio — occupancy, revenue, and maintenance spend. No more update calls.</p>
-            <div class="bc-metrics">
-              <div class="bc-metric">
-                <span class="bcm-n">$14,400</span>
-                <span class="bcm-l">Monthly revenue</span>
+          <!-- Owner Dashboard Panel -->
+          <div class="prod-panel" data-panel="owner">
+            <div class="prod-desc">
+              <h3>Owners stay in the loop</h3>
+              <p>Give property owners a read-only dashboard with live portfolio metrics. No more "how's my property doing?" calls. They check the portal.</p>
+              <ul class="feat-list">
+                <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg> Live occupancy rate and vacancy status</li>
+                <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg> Monthly revenue breakdown by unit</li>
+                <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg> Maintenance spend tracking</li>
+                <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg> Tenant roster and lease expiry dates</li>
+                <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg> Read-only: they see data, not your admin tools</li>
+              </ul>
+            </div>
+            <div class="prod-preview">
+              <div class="pp-bar">
+                <div class="win-dots"><span class="wd wd-r"></span><span class="wd wd-y"></span><span class="wd wd-g"></span></div>
+                <div class="win-url">portal.yourco.com/owner</div>
               </div>
-              <div class="bc-metric">
-                <span class="bcm-n">11/12</span>
-                <span class="bcm-l">Units occupied</span>
+              <div class="pp-body">
+                <div class="pp-greeting">Maple Heights Portfolio</div>
+                <div class="pp-owner-kpis">
+                  <div class="ok"><span class="ok-v">$14,400</span><span class="ok-l">Monthly revenue</span></div>
+                  <div class="ok"><span class="ok-v">11/12</span><span class="ok-l">Units occupied</span></div>
+                </div>
+                <div class="pp-occ-bar-wrap">
+                  <div class="pp-occ-bar"><div class="pp-occ-fill" style="width:91.6%"></div></div>
+                  <span class="pp-occ-lbl">91.6% occupancy</span>
+                </div>
+                <div class="pp-section-lbl">Units</div>
+                <div class="pp-rows">
+                  <div class="pp-row"><span class="pp-dot green"></span><span class="pp-rt">Unit 1A — Johnson, T.</span><span class="pp-tag tag-done">Current</span></div>
+                  <div class="pp-row"><span class="pp-dot green"></span><span class="pp-rt">Unit 2B — Williams, R.</span><span class="pp-tag tag-done">Current</span></div>
+                  <div class="pp-row"><span class="pp-dot gray"></span><span class="pp-rt">Unit 3C — Vacant</span><span class="pp-tag tag-vacant">Vacant</span></div>
+                </div>
               </div>
-              <div class="bc-metric bc-metric--full">
-                <div class="bcm-bar-wrap"><div class="bcm-bar" style="width:91.6%"></div></div>
-                <span class="bcm-l">Occupancy rate &mdash; 91.6%</span>
-              </div>
             </div>
-          </div>
-
-          <!-- Small card: Maintenance tracker -->
-          <div class="bc bc-small">
-            <div class="bc-icon-wrap bc-icon-amber">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>
-            </div>
-            <h3>Maintenance tracker</h3>
-            <p>Every ticket logged, assigned, and resolved — with full history and contractor notes in one place.</p>
-          </div>
-
-          <!-- Small card: Document hub -->
-          <div class="bc bc-small">
-            <div class="bc-icon-wrap bc-icon-blue">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-            </div>
-            <h3>Document hub</h3>
-            <p>Leases, inspection reports, and notices stored securely — accessible to the right people, any time.</p>
-          </div>
-
-          <!-- Small card: PM command center -->
-          <div class="bc bc-small">
-            <div class="bc-icon-wrap bc-icon-green">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
-            </div>
-            <h3>PM command center</h3>
-            <p>All tenants, leases, rent status, and messages in one admin view — no more switching between six tools.</p>
           </div>
 
         </div>
       </section>
+
+      <!-- ============================== TESTIMONIALS ============================== -->
+      <div class="section-band" id="testimonials">
+        <section class="section-inner s-testi">
+          <div class="s-eyebrow">What clients say</div>
+          <h2 class="testi-h2">PMs who made the switch</h2>
+
+          <div class="testi-grid">
+
+            <div class="testi-card">
+              <div class="testi-stars">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="#f59e0b" stroke="none"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="#f59e0b" stroke="none"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="#f59e0b" stroke="none"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="#f59e0b" stroke="none"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="#f59e0b" stroke="none"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+              </div>
+              <p class="testi-q">"I was drowning in tenant texts and missed maintenance calls. Since the portal launched I haven't received a single direct text about a repair. The tenants actually <em>prefer</em> the portal."</p>
+              <div class="testi-author">
+                <div class="testi-av" style="background:#2563eb;">J</div>
+                <div>
+                  <div class="testi-name">James Kowalski</div>
+                  <div class="testi-role">PM · 18 units · Chicago, IL</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="testi-card">
+              <div class="testi-stars">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="#f59e0b" stroke="none"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="#f59e0b" stroke="none"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="#f59e0b" stroke="none"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="#f59e0b" stroke="none"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="#f59e0b" stroke="none"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+              </div>
+              <p class="testi-q">"My investors used to call every week asking for updates. Now they log into the owner dashboard whenever they want. I recovered at least 5 hours a week from those update conversations alone."</p>
+              <div class="testi-author">
+                <div class="testi-av" style="background:#7c3aed;">M</div>
+                <div>
+                  <div class="testi-name">Maria Santos</div>
+                  <div class="testi-role">PM · 34 units · Miami, FL</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="testi-card">
+              <div class="testi-stars">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="#f59e0b" stroke="none"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="#f59e0b" stroke="none"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="#f59e0b" stroke="none"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="#f59e0b" stroke="none"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="#f59e0b" stroke="none"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+              </div>
+              <p class="testi-q">"I was paying $280/month for AppFolio and using 10% of its features. BMP built exactly what I needed, branded to my company, for a fraction of what I was spending. Setup was genuinely zero effort on my end."</p>
+              <div class="testi-author">
+                <div class="testi-av" style="background:#059669;">S</div>
+                <div>
+                  <div class="testi-name">Sam Okafor</div>
+                  <div class="testi-role">PM · 11 units · Austin, TX</div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </section>
+      </div>
 
       <!-- ============================== HOW IT WORKS ============================== -->
-      <div class="section-band">
-        <section class="section s-hiw">
-          <h2 class="hiw-h2">Live in <em>two weeks.</em></h2>
-          <p class="hiw-sub">No technical setup. No homework. We handle everything.</p>
+      <section class="section-inner s-hiw" id="how">
+        <div class="s-eyebrow">The process</div>
+        <h2 class="hiw-h2">Live in <em>two weeks.</em></h2>
+        <p class="hiw-sub">No technical setup. No homework for you. We handle everything — you just review.</p>
 
-          <div class="hiw-timeline">
-            <div class="hiw-step">
-              <div class="hiw-dot">1</div>
+        <div class="hiw-timeline">
+          <div class="hiw-step">
+            <div class="hiw-dot">1</div>
+            <div class="hiw-content">
               <div class="hiw-day">Day 1</div>
               <div class="hiw-title">Discovery call</div>
-              <div class="hiw-note">30 min &mdash; you walk us through your workflow</div>
+              <div class="hiw-note">30 min — you walk us through your workflow, your properties, and what you need</div>
+              <ul class="hiw-bullets">
+                <li>Understand your tenant/owner setup</li>
+                <li>Confirm branding (logo, colors, domain)</li>
+                <li>Agree on feature scope</li>
+              </ul>
             </div>
-            <div class="hiw-step">
-              <div class="hiw-dot">2</div>
-              <div class="hiw-day">Days 2&ndash;13</div>
+          </div>
+          <div class="hiw-connector"></div>
+          <div class="hiw-step">
+            <div class="hiw-dot">2</div>
+            <div class="hiw-content">
+              <div class="hiw-day">Days 2–13</div>
               <div class="hiw-title">We build</div>
-              <div class="hiw-note">Custom portal, branded to your business, tested and ready</div>
+              <div class="hiw-note">Custom portal, branded to your business, tested and ready to launch</div>
+              <ul class="hiw-bullets">
+                <li>All three portals built and configured</li>
+                <li>Your data migrated from spreadsheets</li>
+                <li>You get a preview link to review</li>
+              </ul>
             </div>
-            <div class="hiw-step hiw-step--live">
-              <div class="hiw-dot hiw-dot--live">3</div>
+          </div>
+          <div class="hiw-connector"></div>
+          <div class="hiw-step hiw-step--live">
+            <div class="hiw-dot hiw-dot--live">3</div>
+            <div class="hiw-content">
               <div class="hiw-day">Day 14</div>
               <div class="hiw-title">You go live</div>
-              <div class="hiw-note">Tenants onboarded, full launch support included</div>
+              <div class="hiw-note">Tenants onboarded, full launch support included — we're there for the first week</div>
+              <ul class="hiw-bullets">
+                <li>Custom domain pointed &amp; secured</li>
+                <li>Tenant onboarding emails sent</li>
+                <li>7-day launch support window</li>
+              </ul>
             </div>
-          </div>
-        </section>
-      </div>
-
-      <!-- ============================== PRICING ============================== -->
-      <section class="section" id="pricing">
-        <div class="s-eyebrow">Pricing</div>
-        <h2 class="s-h2">Simple, transparent pricing.<br>No surprises.</h2>
-        <p class="s-p">No per-seat fees. No hidden costs. A fixed build fee and a flat monthly rate — that&rsquo;s it.</p>
-
-        <div class="pricing-row">
-          <div class="price-card">
-            <div class="pc-type">Build fee</div>
-            <div class="pc-price">$4,500</div>
-            <div class="pc-cadence">one-time</div>
-            <p class="pc-desc">Custom portal built and delivered in under two weeks. Your brand, your workflow, yours to keep.</p>
-            <div class="pc-divider"></div>
-            <ul class="pc-list">
-              <li>Tenant portal</li>
-              <li>Owner dashboard</li>
-              <li>PM admin center</li>
-              <li>Custom domain setup</li>
-              <li>Full onboarding support</li>
-            </ul>
-          </div>
-
-          <div class="price-card">
-            <div class="pc-type">Monthly</div>
-            <div class="pc-price">$200</div>
-            <div class="pc-cadence">per month</div>
-            <p class="pc-desc">Hosting, backups, support, and quarterly feature updates included every single month.</p>
-            <div class="pc-divider"></div>
-            <ul class="pc-list">
-              <li>Secure cloud hosting</li>
-              <li>Automated backups</li>
-              <li>Priority support</li>
-              <li>Quarterly updates</li>
-              <li>99.9% uptime SLA</li>
-            </ul>
-          </div>
-
-          <div class="price-card price-card--offer">
-            <div class="pc-type">Introductory build fee</div>
-            <div class="pc-price">$2,700</div>
-            <div class="pc-cadence">one-time &middot; 40% off</div>
-            <p class="pc-desc">Same portal, same support, same results — at 40% off in exchange for a testimonial after 30 days.</p>
-            <a class="btn-offer" href="#contact">Claim this offer &rarr;</a>
           </div>
         </div>
-
-        <p class="pricing-fine">No hidden costs. No per-seat pricing. Fixed monthly fee for ongoing hosting and support.</p>
       </section>
 
-      <!-- ============================== FAQ ============================== -->
-      <div class="section-band" id="faq">
-        <section class="section">
-          <h2 class="faq-h2">FAQ</h2>
+      <!-- ============================== PRICING ============================== -->
+      <div class="section-band" id="pricing">
+        <section class="section-inner s-pricing">
+          <div class="s-eyebrow">Pricing</div>
+          <h2>Simple, transparent pricing.</h2>
+          <p class="s-p">No per-seat fees. No hidden costs. A fixed build fee and a flat monthly rate — that's it.</p>
 
-          <div class="faq-grid">
+          <div class="pricing-row">
 
-            <div class="faq-item" data-faq>
-              <button class="faq-q" aria-expanded="false">
-                <span>How long does it take to build the portal?</span>
-                <span class="faq-icon">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                </span>
-              </button>
-              <div class="faq-a">
-                <p>Most portals are delivered in under two weeks from the discovery call. We handle all the building, configuration, and testing — you just review and approve before we go live.</p>
-              </div>
+            <div class="price-card">
+              <div class="pc-type">Build fee</div>
+              <div class="pc-price">$4,500</div>
+              <div class="pc-cadence">one-time</div>
+              <p class="pc-desc">Custom portal built and delivered in under two weeks. Your brand, your workflow, yours forever.</p>
+              <div class="pc-divider"></div>
+              <ul class="pc-list">
+                <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg> Tenant portal</li>
+                <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg> Owner dashboard</li>
+                <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg> PM admin center</li>
+                <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg> Custom domain &amp; branding</li>
+                <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg> Full onboarding support</li>
+              </ul>
             </div>
 
-            <div class="faq-item" data-faq>
-              <button class="faq-q" aria-expanded="false">
-                <span>Do I need any technical experience?</span>
-                <span class="faq-icon">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                </span>
-              </button>
-              <div class="faq-a">
-                <p>None at all. We handle all the technical setup — hosting, domain, onboarding your tenants and owners. You just use the portal. If anything breaks, you call us.</p>
-              </div>
+            <div class="price-card">
+              <div class="pc-type">Monthly</div>
+              <div class="pc-price">$200</div>
+              <div class="pc-cadence">per month, no contract</div>
+              <p class="pc-desc">Hosting, backups, priority support, and quarterly feature updates — included every month.</p>
+              <div class="pc-divider"></div>
+              <ul class="pc-list">
+                <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg> Secure cloud hosting</li>
+                <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg> Automated daily backups</li>
+                <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg> Priority email &amp; phone support</li>
+                <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg> Quarterly feature updates</li>
+                <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg> 99.9% uptime SLA</li>
+              </ul>
             </div>
 
-            <div class="faq-item" data-faq>
-              <button class="faq-q" aria-expanded="false">
-                <span>Can I use my own domain and branding?</span>
-                <span class="faq-icon">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                </span>
-              </button>
-              <div class="faq-a">
-                <p>Yes — custom domain setup is included in the build fee. The portal is branded to your business (your logo, colors, company name) so tenants and owners see your brand, not ours.</p>
-              </div>
-            </div>
-
-            <div class="faq-item" data-faq>
-              <button class="faq-q" aria-expanded="false">
-                <span>What happens if I need changes after launch?</span>
-                <span class="faq-icon">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                </span>
-              </button>
-              <div class="faq-a">
-                <p>Quarterly feature updates are included in your $200/month plan. For immediate changes or larger additions, we handle those on a scoped basis — you tell us what you need and we quote it.</p>
-              </div>
-            </div>
-
-            <div class="faq-item" data-faq>
-              <button class="faq-q" aria-expanded="false">
-                <span>Is my tenants&rsquo; data secure?</span>
-                <span class="faq-icon">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                </span>
-              </button>
-              <div class="faq-a">
-                <p>Yes. All portals are hosted on secure cloud infrastructure with automated daily backups, HTTPS encryption, and access controls. Tenants and owners can only see their own data.</p>
-              </div>
-            </div>
-
-            <div class="faq-item" data-faq>
-              <button class="faq-q" aria-expanded="false">
-                <span>Can I cancel the monthly plan?</span>
-                <span class="faq-icon">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                </span>
-              </button>
-              <div class="faq-a">
-                <p>Yes — no lock-in contracts. Cancel with 30 days&rsquo; notice. You own the portal; if you ever want to self-host it, we&rsquo;ll hand it over with a full data export.</p>
-              </div>
+            <div class="price-card price-card--offer">
+              <div class="pc-offer-tag">Limited offer</div>
+              <div class="pc-type">Introductory build fee</div>
+              <div class="pc-price">$2,700</div>
+              <div class="pc-cadence">one-time &nbsp;·&nbsp; <s style="opacity:.55;">$4,500</s> 40% off</div>
+              <p class="pc-desc">Same portal, same support, same results — 40% off in exchange for a testimonial after 30 days.</p>
+              <div class="pc-divider"></div>
+              <ul class="pc-list">
+                <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" opacity=".7"><polyline points="20 6 9 17 4 12"/></svg> Everything in the standard build</li>
+                <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" opacity=".7"><polyline points="20 6 9 17 4 12"/></svg> First 5 clients only</li>
+                <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" opacity=".7"><polyline points="20 6 9 17 4 12"/></svg> One testimonial after 30 days</li>
+              </ul>
+              <a class="btn-offer" href="#contact">Claim this offer &rarr;</a>
             </div>
 
           </div>
+
+          <p class="pricing-fine">No hidden costs · No per-unit pricing · Cancel monthly plan with 30 days notice · You own the portal</p>
         </section>
       </div>
+
+      <!-- ============================== FAQ ============================== -->
+      <section class="section-inner s-faq" id="faq">
+        <div class="s-eyebrow">FAQ</div>
+        <h2 class="faq-h2">Questions &amp; answers</h2>
+
+        <div class="faq-grid">
+
+          <div class="faq-item" data-faq>
+            <button class="faq-q" aria-expanded="false">
+              <span>How long does it take to build the portal?</span>
+              <span class="faq-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span>
+            </button>
+            <div class="faq-a"><p>Most portals are delivered in under two weeks from the discovery call. We handle all the building, configuration, and testing — you just review and approve before we go live.</p></div>
+          </div>
+
+          <div class="faq-item" data-faq>
+            <button class="faq-q" aria-expanded="false">
+              <span>Do I need any technical experience?</span>
+              <span class="faq-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span>
+            </button>
+            <div class="faq-a"><p>None at all. We handle all the technical setup — hosting, domain, onboarding your tenants and owners. You just use the portal. If anything breaks, you call us.</p></div>
+          </div>
+
+          <div class="faq-item" data-faq>
+            <button class="faq-q" aria-expanded="false">
+              <span>Can I use my own domain and branding?</span>
+              <span class="faq-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span>
+            </button>
+            <div class="faq-a"><p>Yes — custom domain setup is included in the build fee. The portal is branded to your business (your logo, colors, company name) so tenants and owners see your brand, not ours.</p></div>
+          </div>
+
+          <div class="faq-item" data-faq>
+            <button class="faq-q" aria-expanded="false">
+              <span>What happens if I need changes after launch?</span>
+              <span class="faq-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span>
+            </button>
+            <div class="faq-a"><p>Quarterly feature updates are included in your $200/month plan. For immediate changes or larger additions, we handle those on a scoped basis — you tell us what you need and we quote it.</p></div>
+          </div>
+
+          <div class="faq-item" data-faq>
+            <button class="faq-q" aria-expanded="false">
+              <span>Is my tenants' data secure?</span>
+              <span class="faq-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span>
+            </button>
+            <div class="faq-a"><p>Yes. All portals are hosted on secure cloud infrastructure with automated daily backups, HTTPS encryption, and access controls. Tenants and owners can only see their own data — row-level security enforced at the database level.</p></div>
+          </div>
+
+          <div class="faq-item" data-faq>
+            <button class="faq-q" aria-expanded="false">
+              <span>Can I cancel the monthly plan?</span>
+              <span class="faq-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span>
+            </button>
+            <div class="faq-a"><p>Yes — no lock-in contracts. Cancel with 30 days' notice. You own the portal; if you ever want to self-host it, we'll hand it over with a full data export.</p></div>
+          </div>
+
+          <div class="faq-item" data-faq>
+            <button class="faq-q" aria-expanded="false">
+              <span>How many properties or units can the portal handle?</span>
+              <span class="faq-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span>
+            </button>
+            <div class="faq-a"><p>There's no hard cap. The portal is built on scalable cloud infrastructure — whether you manage 8 units or 80, it handles it the same. No per-unit or per-user pricing, ever.</p></div>
+          </div>
+
+          <div class="faq-item" data-faq>
+            <button class="faq-q" aria-expanded="false">
+              <span>Do you migrate my existing data?</span>
+              <span class="faq-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span>
+            </button>
+            <div class="faq-a"><p>Yes. Send us your spreadsheets and we'll import tenants, properties, leases, and payment history into the portal before launch. No data entry on your end.</p></div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- ============================== CTA BAND ============================== -->
+      <section class="s-cta-band" id="contact">
+        <div class="cta-inner">
+          <div class="cta-left">
+            <div class="cta-eyebrow">Ready to make the switch?</div>
+            <h2 class="cta-h2">Stop duct-taping your workflow.</h2>
+            <p class="cta-p">Book a free 30-minute demo. We'll show you the live portal and scope your build on the spot — no sales deck, no fluff.</p>
+            <div class="cta-checks">
+              <span class="cta-check"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg> No commitment</span>
+              <span class="cta-check"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg> Live portal walkthrough</span>
+              <span class="cta-check"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg> Same-day quote</span>
+            </div>
+          </div>
+          <div class="cta-right">
+            <div class="cta-card">
+              <div class="cta-card-head">Book a free demo</div>
+              <div class="cta-av-row">
+                <div class="fc-av" style="background:#2563eb;">J</div>
+                <div class="fc-av" style="background:#7c3aed;">M</div>
+                <div class="fc-av" style="background:#059669;">S</div>
+                <div class="fc-av" style="background:#dc2626;">A</div>
+                <span class="cta-av-label">Join them &rarr;</span>
+              </div>
+              <a href="https://calendly.com/bmp-central/demo" class="btn-cta-main">Request a demo call &rarr;</a>
+              <div class="cta-or">or email us directly</div>
+              <a href="mailto:hello@bmpcentral.com" class="cta-email">hello@bmpcentral.com</a>
+              <div class="cta-fine">Typical response time: same business day</div>
+            </div>
+          </div>
+        </div>
+      </section>
 
     </main>
 
-    <!-- FOOTER (Sendblue rounded card style) -->
-    <div class="footer-wrap">
-      <footer class="footer-card" id="contact">
-        <div class="fc-top">
-          <div class="fc-hero">
-            <div class="fc-get">Get started</div>
-            <div class="fc-today">today.<div class="fc-avs"><div class="fc-av" style="background:#2563eb;">J</div><div class="fc-av" style="background:#7c3aed;">M</div><div class="fc-av" style="background:#059669;">S</div></div></div>
+    <!-- ============================== FOOTER ============================== -->
+    <footer class="site-footer">
+      <div class="footer-inner">
+        <div class="footer-brand">
+          <a href="/" class="logo footer-logo">
+            <span class="logo-mark">BMP</span>
+            <span class="logo-text">BMP Central</span>
+          </a>
+          <p class="footer-tagline">Custom property management portals for independent PMs. Delivered in 2 weeks, fixed price.</p>
+          <a href="mailto:hello@bmpcentral.com" class="footer-email">hello@bmpcentral.com</a>
+        </div>
+        <div class="footer-cols">
+          <div class="footer-col">
+            <div class="fc-col-h">Product</div>
+            <a href="#product">PM Admin</a>
+            <a href="#product">Tenant Portal</a>
+            <a href="#product">Owner Dashboard</a>
+            <a href="https://bmp-portal.vercel.app">Live demo</a>
           </div>
-          <div class="fc-cta-block">
-            <p class="fc-cta-p">Custom property portals — tenant portal, owner dashboard, and PM admin center. Delivered in 2 weeks, fixed price.</p>
-            <a href="https://calendly.com/bmp-central/demo" class="btn-fc">Request a demo</a>
+          <div class="footer-col">
+            <div class="fc-col-h">Company</div>
+            <a href="#why">Why BMP</a>
+            <a href="#pricing">Pricing</a>
+            <a href="#faq">FAQ</a>
+            <a href="#contact">Contact</a>
+          </div>
+          <div class="footer-col">
+            <div class="fc-col-h">Get started</div>
+            <a href="#contact">Request a demo</a>
+            <a href="mailto:hello@bmpcentral.com">Email us</a>
+            <a href="https://bmp-portal.vercel.app">Client login</a>
           </div>
         </div>
-        <div class="fc-nav">
-          <div class="fc-col"><div class="fc-col-h">Product</div><a href="#product">Tenant portal</a><a href="#product">Owner dashboard</a><a href="#product">PM admin center</a><a href="demo.html">Live demo</a></div>
-          <div class="fc-col"><div class="fc-col-h">Company</div><a href="#why">Why BMP</a><a href="#pricing">Pricing</a><a href="#faq">FAQ</a><a href="mailto:hello@bmpcentral.com">Contact</a></div>
-        </div>
-        <div class="fc-wordmark">BMP Central</div>
-        <div class="fc-bottom"><span>&copy; 2025 BMP Central &nbsp;&middot;&nbsp; hello@bmpcentral.com</span><a href="#" class="fc-top-link">Back to the top &uarr;</a></div>
-      </footer>
-    </div>
+      </div>
+      <div class="footer-bottom">
+        <span>&copy; 2025 BMP Central</span>
+        <span class="footer-sep">·</span>
+        <a href="#">Privacy</a>
+        <span class="footer-sep">·</span>
+        <a href="#">Terms</a>
+        <a href="#" class="footer-top">Back to top &uarr;</a>
+      </div>
+    </footer>
 
     <script src="script.js"></script>
   </body>

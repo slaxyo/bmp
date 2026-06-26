@@ -1,5 +1,11 @@
 // ─── Interfaces ──────────────────────────────────────────────────────────────
 
+export interface ChecklistItem {
+  key: string
+  label: string
+  checked: boolean
+}
+
 export interface Tenant {
   id: string
   name: string
@@ -13,6 +19,8 @@ export interface Tenant {
   phone: string
   moveIn: string
   rentDueDay?: number | null  // day-of-month (1–28) rent is due; null = no reminder
+  moveInChecklist?: ChecklistItem[] | null
+  notes?: string | null
 }
 
 export interface MaintenanceTicket {
@@ -27,8 +35,15 @@ export interface MaintenanceTicket {
   priority: 'low' | 'medium' | 'high' | 'emergency'
   status: 'open' | 'in_progress' | 'resolved'
   createdAt: string
+  createdAtIso?: string
   updatedAt: string
   cost?: number
+  assignedTo?: string | null
+  vendorName?: string | null
+  vendorPhone?: string | null
+  estimatedCost?: number | null
+  actualCost?: number | null
+  photos?: string[]
 }
 
 export interface Property {

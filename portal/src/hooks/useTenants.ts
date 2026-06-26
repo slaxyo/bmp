@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
-import type { Tenant } from '../data/mockData'
+import type { Tenant, ChecklistItem } from '../data/mockData'
 import { tenants as mockTenants } from '../data/mockData'
 import { useDemoMode } from '../context/DemoModeContext'
 
@@ -25,6 +25,8 @@ function transform(row: Record<string, unknown>): Tenant {
     phone: (row.phone as string) ?? '',
     moveIn: fmtDate(row.lease_start as string | null),
     rentDueDay: (row.rent_due_day as number | null) ?? null,
+    moveInChecklist: (row.move_in_checklist as ChecklistItem[] | null) ?? null,
+    notes: (row.notes as string | null) ?? null,
   }
 }
 

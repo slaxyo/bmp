@@ -7,13 +7,17 @@ import {
   Eye, EyeOff, Camera, Pencil, CheckCircle, LogOut, HelpCircle,
   Keyboard, TrendingUp, BarChart2, AlertTriangle, Search, ChevronUp, ChevronDown,
   CreditCard, Receipt, AlertCircle, Trash2, Upload, ClipboardList,
+  BedDouble, Bath, Maximize2, MapPin, Zap, ImageIcon, Star,
+  TrendingDown, ArrowUpRight, ArrowDownLeft, Landmark, PiggyBank,
+  Clock, Repeat, Phone, UserCheck, CalendarDays,
+  Mail, PhoneCall, StickyNote, UserPlus, ClipboardCheck,
 } from 'lucide-react'
 import {
   XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Area, AreaChart, BarChart, Bar,
   PieChart, Pie, Cell, Legend,
 } from 'recharts'
-import type { Thread, ChatMessage, Tenant, MaintenanceTicket, Property, RentRecord } from '../data/mockData'
+import type { Thread, ChatMessage, Tenant, MaintenanceTicket, Property, RentRecord, ChecklistItem } from '../data/mockData'
 import { occupancyData, revenueData, ticketsByMonth, ticketsByType, activityFeed as mockActivityFeed } from '../data/mockData'
 import { useDemoMode } from '../context/DemoModeContext'
 import { supabase } from '../lib/supabase'
@@ -1192,6 +1196,136 @@ function AnnouncementModal({ tenants, properties, onClose, onSent }: Announcemen
 
 // ─── Inspections Sub-panel (inside Maintenance) ───────────────────────────────
 
+interface Lease {
+  id: string
+  tenantId: string
+  unitId: string | null
+  propertyName: string
+  unitNumber: string
+  startDate: string
+  endDate: string
+  rentAmount: number
+  securityDeposit: number | null
+  petDeposit: number | null
+  depositReturned: number | null
+  depositDeductions: string | null
+  escalationPct: number | null
+  renewalOption: 'auto' | 'manual' | 'none'
+  status: 'draft' | 'active' | 'expired' | 'renewed' | 'terminated'
+  renewalSentAt: string | null
+  notes: string | null
+  createdAt: string
+}
+
+function leaseFromRow(r: Record<string, unknown>): Lease {
+  return {
+    id: r.id as string,
+    tenantId: r.tenant_id as string,
+    unitId: r.unit_id as string | null,
+    propertyName: (r.property_name as string) ?? '',
+    unitNumber: (r.unit_number as string) ?? '',
+    startDate: r.start_date as string,
+    endDate: r.end_date as string,
+    rentAmount: r.rent_amount as number,
+    securityDeposit: r.security_deposit as number | null,
+    petDeposit: r.pet_deposit as number | null,
+    depositReturned: r.deposit_returned as number | null,
+    depositDeductions: r.deposit_deductions as string | null,
+    escalationPct: r.escalation_pct as number | null,
+    renewalOption: (r.renewal_option as Lease['renewalOption']) ?? 'manual',
+    status: (r.status as Lease['status']) ?? 'active',
+    renewalSentAt: r.renewal_sent_at as string | null,
+    notes: r.notes as string | null,
+    createdAt: r.created_at as string,
+  }
+}
+
+const LEASE_CREATE_SQL = `create table if not exists public.leases (
+  id uuid primary key default gen_random_uuid(),
+  pm_id uuid references auth.users(id) on delete cascade,
+  tenant_id uuid references public.tenants(id) on delete cascade,
+  unit_id uuid references public.units(id),
+  property_name text,
+  unit_number text,
+  start_date date not null,
+  end_date date not null,
+  rent_amount numeric not null,
+  security_deposit numeric,
+  pet_deposit numeric,
+  deposit_returned numeric,
+  deposit_deductions text,
+  escalation_pct numeric,
+  renewal_option text default 'manual',
+  status text not null default 'active',
+  renewal_sent_at timestamptz,
+  notes text,
+  created_at timestamptz default now()
+);
+alter table public.leases enable row level security;
+create policy "PM full access" on public.leases
+  using (pm_id = auth.uid()) with check (pm_id = auth.uid());`
+
+// ─── Ledger ───────────────────────────────────────────────────────────────────
+
+type LedgerEntryType = 'rent' | 'late_fee' | 'deposit' | 'expense' | 'refund' | 'payout'
+
+interface LedgerEntry {
+  id: string
+  pmId: string
+  propertyId: string | null
+  tenantId: string | null
+  type: LedgerEntryType
+  amount: number        // positive = income, negative = expense
+  date: string
+  description: string
+  referenceId: string | null
+  createdAt: string
+}
+
+function ledgerEntryFromRow(r: Record<string, unknown>): LedgerEntry {
+  return {
+    id: r.id as string,
+    pmId: r.pm_id as string,
+    propertyId: r.property_id as string | null,
+    tenantId: r.tenant_id as string | null,
+    type: r.type as LedgerEntryType,
+    amount: r.amount as number,
+    date: r.date as string,
+    description: r.description as string,
+    referenceId: r.reference_id as string | null,
+    createdAt: r.created_at as string,
+  }
+}
+
+const EXPENSE_CATEGORIES = [
+  { value: 'mortgage',    label: 'Mortgage',        color: 'bg-blue-100 text-blue-700' },
+  { value: 'insurance',   label: 'Insurance',        color: 'bg-purple-100 text-purple-700' },
+  { value: 'tax',         label: 'Property Tax',     color: 'bg-amber-100 text-amber-700' },
+  { value: 'repair',      label: 'Repair/Maintenance', color: 'bg-orange-100 text-orange-700' },
+  { value: 'utility',     label: 'Utilities',        color: 'bg-cyan-100 text-cyan-700' },
+  { value: 'management',  label: 'Management Fee',   color: 'bg-indigo-100 text-indigo-700' },
+  { value: 'landscaping', label: 'Landscaping',      color: 'bg-green-100 text-green-700' },
+  { value: 'other',       label: 'Other',            color: 'bg-gray-100 text-gray-600' },
+] as const
+
+const LEDGER_CREATE_SQL = `create table if not exists public.ledger_entries (
+  id uuid primary key default gen_random_uuid(),
+  pm_id uuid references auth.users(id) on delete cascade,
+  property_id uuid references public.properties(id),
+  tenant_id uuid references public.tenants(id),
+  type text not null,
+  amount numeric not null,
+  date date not null,
+  description text,
+  reference_id uuid,
+  created_at timestamptz default now()
+)
+
+alter table public.ledger_entries enable row level security
+
+create policy "PM full access" on public.ledger_entries
+  using (pm_id = auth.uid()) with check (pm_id = auth.uid())`
+
 interface Inspection {
   id: string
   property: string
@@ -1211,6 +1345,170 @@ interface Inspection {
   status: 'scheduled' | 'in_progress' | 'completed' | 'cancelled'
   createdAt: string
 }
+
+interface DBUnit {
+  id: string
+  propertyId: string
+  unitNumber: string
+  bedrooms: number | null
+  bathrooms: number | null
+  sqft: number | null
+  rentAmount: number | null
+  marketRent: number | null
+  status: string | null
+  notes: string | null
+  parkingSpot: string | null
+  utilityInfo: string | null
+}
+
+function dbUnitFromRow(r: Record<string, unknown>): DBUnit {
+  return {
+    id: r.id as string,
+    propertyId: r.property_id as string,
+    unitNumber: r.unit_number as string,
+    bedrooms: (r.bedrooms as number | null) ?? null,
+    bathrooms: (r.bathrooms as number | null) ?? null,
+    sqft: (r.sqft as number | null) ?? null,
+    rentAmount: (r.rent_amount as number | null) ?? null,
+    marketRent: (r.market_rent as number | null) ?? null,
+    status: (r.status as string | null) ?? 'vacant',
+    notes: (r.notes as string | null) ?? null,
+    parkingSpot: (r.parking_spot as string | null) ?? null,
+    utilityInfo: (r.utility_info as string | null) ?? null,
+  }
+}
+
+const UNIT_STATUSES = [
+  { value: 'occupied',    label: 'Occupied',    color: 'bg-green-100 text-green-700',  dot: 'bg-green-500' },
+  { value: 'vacant',      label: 'Vacant',      color: 'bg-gray-100 text-gray-600',    dot: 'bg-gray-400' },
+  { value: 'maintenance', label: 'Maintenance', color: 'bg-amber-100 text-amber-700',  dot: 'bg-amber-500' },
+  { value: 'reserved',    label: 'Reserved',    color: 'bg-blue-100 text-blue-700',    dot: 'bg-blue-500' },
+] as const
+
+// Catches both PostgreSQL "relation does not exist" (42P01) and PostgREST
+// schema-cache misses ("Could not find the table … in the schema cache")
+function isTableMissing(err: { code?: string; message?: string } | null | undefined): boolean {
+  if (!err) return false
+  return err.code === '42P01' || (err.message?.includes('schema cache') ?? false)
+}
+
+// ─── Phase 5: Maintenance upgrades ───────────────────────────────────────────
+
+interface RecurringSchedule {
+  id: string
+  pmId: string
+  propertyId: string | null
+  propertyName?: string
+  unitId: string | null
+  title: string
+  frequency: 'weekly' | 'monthly' | 'quarterly' | 'annually'
+  nextDue: string   // ISO date "YYYY-MM-DD"
+  lastRun: string | null
+  createdAt: string
+}
+
+function recurringScheduleFromRow(r: Record<string, unknown>): RecurringSchedule {
+  return {
+    id: r.id as string,
+    pmId: r.pm_id as string,
+    propertyId: (r.property_id as string | null) ?? null,
+    propertyName: (r.property_name as string | undefined) ?? undefined,
+    unitId: (r.unit_id as string | null) ?? null,
+    title: r.title as string,
+    frequency: (r.frequency as RecurringSchedule['frequency']) ?? 'monthly',
+    nextDue: r.next_due as string,
+    lastRun: (r.last_run as string | null) ?? null,
+    createdAt: r.created_at as string,
+  }
+}
+
+const SCHEDULE_FREQUENCIES: { value: RecurringSchedule['frequency']; label: string; days: number }[] = [
+  { value: 'weekly',    label: 'Weekly',    days: 7   },
+  { value: 'monthly',   label: 'Monthly',   days: 30  },
+  { value: 'quarterly', label: 'Quarterly', days: 90  },
+  { value: 'annually',  label: 'Annually',  days: 365 },
+]
+
+const MAINTENANCE_ALTER_SQL = `alter table public.maintenance_requests
+  add column if not exists assigned_to text,
+  add column if not exists vendor_name text,
+  add column if not exists vendor_phone text,
+  add column if not exists estimated_cost numeric,
+  add column if not exists actual_cost numeric,
+  add column if not exists photos text[],
+  add column if not exists category text`
+
+// ─── Phase 6: Tenant CRM ─────────────────────────────────────────────────────
+
+interface EmergencyContact {
+  id: string
+  tenantId: string
+  name: string
+  phone: string
+  relationship: string
+}
+
+interface CommLogEntry {
+  id: string
+  tenantId: string | null
+  adminId: string | null
+  type: string
+  text: string
+  createdAt: string
+}
+
+const MOVE_IN_CHECKLIST_TEMPLATE: ChecklistItem[] = [
+  { key: 'keys',        label: 'Keys handed over',                checked: false },
+  { key: 'walkthrough', label: 'Move-in walkthrough completed',   checked: false },
+  { key: 'photos',      label: 'Move-in photos taken',            checked: false },
+  { key: 'utilities',   label: 'Utility transfer confirmed',      checked: false },
+  { key: 'lease',       label: 'Lease signed & countersigned',    checked: false },
+  { key: 'deposit',     label: 'Security deposit collected',      checked: false },
+]
+
+const COMM_LOG_TYPES = [
+  { value: 'note',      label: 'Note',       color: 'bg-gray-100 text-gray-700',   icon: StickyNote  },
+  { value: 'call',      label: 'Phone Call', color: 'bg-blue-100 text-blue-700',   icon: PhoneCall   },
+  { value: 'email',     label: 'Email',      color: 'bg-purple-100 text-purple-700', icon: Mail      },
+  { value: 'in-person', label: 'In-Person',  color: 'bg-green-100 text-green-700', icon: UserCheck   },
+  { value: 'letter',    label: 'Letter',     color: 'bg-amber-100 text-amber-700', icon: FileText    },
+] as const
+
+const EMERGENCY_CONTACTS_SQL = `create table if not exists public.emergency_contacts (
+  id uuid primary key default gen_random_uuid(),
+  pm_id uuid references auth.users(id) on delete cascade,
+  tenant_id uuid references public.tenants(id) on delete cascade,
+  name text not null,
+  phone text,
+  relationship text,
+  created_at timestamptz default now()
+)
+
+alter table public.emergency_contacts enable row level security
+
+create policy "PM full access" on public.emergency_contacts
+  for all using (pm_id = auth.uid()) with check (pm_id = auth.uid())`
+
+const TENANT_SCHEMA_SQL = `alter table public.tenants add column if not exists move_in_checklist jsonb
+
+alter table public.activity_log add column if not exists tenant_id uuid references public.tenants(id)`
+
+const SCHEDULES_CREATE_SQL = `create table if not exists public.maintenance_schedules (
+  id uuid primary key default gen_random_uuid(),
+  pm_id uuid references auth.users(id) on delete cascade,
+  property_id uuid references public.properties(id),
+  unit_id uuid references public.units(id),
+  title text not null,
+  frequency text not null default 'monthly',
+  next_due date not null,
+  last_run date,
+  created_at timestamptz default now()
+)
+
+alter table public.maintenance_schedules enable row level security
+
+create policy "PM full access" on public.maintenance_schedules
+  for all using (pm_id = auth.uid()) with check (pm_id = auth.uid())`
 
 const INSPECTION_TYPES = [
   { value: 'routine', label: 'Routine', color: 'bg-blue-100 text-blue-700' },
@@ -2981,482 +3279,425 @@ function PendingPaymentRow({ record, tenantName, onConfirm }: { record: RentReco
   )
 }
 
-interface DashboardPanelProps {
-  setActivePanel: (panel: string) => void
-  setAnalyticsSection: (section: string) => void
-  onShowInviteModal: () => void
-  onShowAddPropertyModal: () => void
-  onShowReportModal: () => void
-  onShowAnnouncementModal: () => void
-  onShowScheduleModal: () => void
-  tickets: MaintenanceTicket[]
+// ─── Command Palette ──────────────────────────────────────────────────────────
+
+function CommandPalette({
+  open, onClose, setActivePanel,
+  tenants, properties, tickets,
+}: {
+  open: boolean
+  onClose: () => void
+  setActivePanel: (p: string) => void
   tenants: Tenant[]
   properties: Property[]
-  rentRecords: RentRecord[]
-  recentActivity: { id: string; type: string; text: string; time: string }[]
-  onConfirmPayment: (recordId: string) => Promise<void>
-}
+  tickets: MaintenanceTicket[]
+}) {
+  const [query, setQuery] = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
 
-function DashboardPanel({
-  setActivePanel, setAnalyticsSection, onShowInviteModal, onShowAddPropertyModal,
-  onShowReportModal, onShowAnnouncementModal, onShowScheduleModal,
-  tickets, tenants, properties, rentRecords, recentActivity, onConfirmPayment,
-}: DashboardPanelProps) {
-  const { primaryColor } = useBranding()
-  const { demoMode } = useDemoMode()
-  const [dashTab, setDashTab] = useState<'tickets' | 'inspections'>('tickets')
-  const [inspPeriod, setInspPeriod] = useState<'week' | 'month'>('week')
-  const [dashInspections, setDashInspections] = useState<Inspection[]>([])
+  useEffect(() => { if (open) { setQuery(''); setTimeout(() => inputRef.current?.focus(), 10) } }, [open])
   useEffect(() => {
-    if (demoMode) return
-    supabase.from('inspections').select('*').in('status', ['scheduled', 'in_progress']).then(({ data }) => {
-      if (data) setDashInspections(data.map((r: Record<string, unknown>) => ({
-        id: r.id as string,
-        property: r.property as string,
-        propertyId: r.property_id as string,
-        unit: r.unit as string,
-        type: r.type as Inspection['type'],
-        date: (r.date as string) ?? '',
-        time: (r.time as string) ?? '',
-        inspectorName: r.inspector_name as string,
-        inspectorPhone: r.inspector_phone as string,
-        durationEstimate: r.duration_estimate as string,
-        entryNoticeSent: r.entry_notice_sent as boolean,
-        accessInstructions: r.access_instructions as string,
-        checklistItems: r.checklist_items as string,
-        findings: r.findings as string,
-        followUpActions: r.follow_up_actions as string,
-        status: r.status as Inspection['status'],
-        createdAt: r.created_at as string,
-      })))
-    })
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [demoMode])
-  const [editQuickActions, setEditQuickActions] = useState(false)
-  const [hiddenActions, setHiddenActions] = useState<Set<string>>(() => {
-    try {
-      const stored = localStorage.getItem('adminHiddenActions')
-      return new Set(stored ? JSON.parse(stored) : [])
-    } catch {
-      return new Set()
-    }
-  })
-  const [actionsOrder, setActionsOrder] = useState<string[]>(() => {
-    try {
-      const stored = localStorage.getItem('adminActionsOrder')
-      return stored ? JSON.parse(stored) : DEFAULT_QUICK_ACTIONS.map(a => a.id)
-    } catch {
-      return DEFAULT_QUICK_ACTIONS.map(a => a.id)
-    }
-  })
+    if (!open) return
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open, onClose])
 
-  function toggleHidden(id: string) {
-    setHiddenActions((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      localStorage.setItem('adminHiddenActions', JSON.stringify([...next]))
-      return next
-    })
-  }
-
-  function moveAction(id: string, direction: 'up' | 'down') {
-    setActionsOrder(prev => {
-      const idx = prev.indexOf(id)
-      if (idx < 0) return prev
-      const next = [...prev]
-      if (direction === 'up' && idx > 0) {
-        [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]]
-      } else if (direction === 'down' && idx < next.length - 1) {
-        [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]]
-      }
-      localStorage.setItem('adminActionsOrder', JSON.stringify(next))
-      return next
-    })
-  }
-
-  function handleQuickAction(id: string) {
-    if (id === 'add-property') onShowAddPropertyModal()
-    else if (id === 'invite-tenant') onShowInviteModal()
-    else if (id === 'generate-report') onShowReportModal()
-    else if (id === 'announcement') onShowAnnouncementModal()
-    else if (id === 'review-tickets') setActivePanel('maintenance')
-    else if (id === 'schedule') onShowScheduleModal()
-  }
-
-  const orderedActions = actionsOrder
-    .map(id => DEFAULT_QUICK_ACTIONS.find(a => a.id === id))
-    .filter(Boolean) as typeof DEFAULT_QUICK_ACTIONS
-
-  const totalUnits = properties.reduce((s, p) => s + p.units, 0)
-  const totalOccupied = properties.reduce((s, p) => s + p.occupied, 0)
-  const totalRevenue = properties.reduce((s, p) => s + p.monthlyIncome, 0)
-  const currentMonth = new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
-  const collectedIds = new Set(rentRecords.filter(r => r.month === currentMonth && r.status !== 'pending').map(r => r.tenantId))
-  const activeTenants = tenants.filter(t => t.status !== 'notice' && t.status !== 'past')
-  const collectedCount = activeTenants.filter(t => collectedIds.has(t.id)).length
-  const overdueCount = activeTenants.filter(t => !collectedIds.has(t.id)).length
-
-  const [occPeriod, setOccPeriod] = useState<'1M' | '3M' | '6M' | '1Y'>('6M')
-  const occTrendData = useMemo(() => {
-    const months = occPeriod === '1M' ? 1 : occPeriod === '3M' ? 3 : occPeriod === '6M' ? 6 : 12
-    const results: { month: string; rate: number }[] = []
-    const now = new Date()
-    for (let i = months - 1; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
-      const monthEnd = new Date(d.getFullYear(), d.getMonth() + 1, 0)
-      const label = d.toLocaleString('en-US', { month: 'short', ...(months === 12 ? { year: '2-digit' } : {}) })
-      let occupied = 0
-      for (const t of tenants) {
-        if (t.status === 'invited') continue
-        const start = t.moveIn ? new Date(t.moveIn) : null
-        const end = t.leaseEnd ? new Date(t.leaseEnd) : null
-        const activeAtMonthEnd = (!start || start <= monthEnd) && (!end || end >= d)
-        if (activeAtMonthEnd) occupied++
-      }
-      const rate = totalUnits > 0 ? Math.min(100, Math.round((occupied / totalUnits) * 100)) : 0
-      results.push({ month: label, rate })
-    }
-    return results
-  }, [occPeriod, tenants, totalUnits])
-
-  const kpis = [
-    { label: 'Properties', value: String(properties.length), icon: <Building2 className="w-5 h-5" />, trend: null, color: 'text-blue-600 bg-blue-50', section: 'overview' },
-    { label: 'Total Units', value: String(totalUnits), icon: <Home className="w-5 h-5" />, trend: null, color: 'text-purple-600 bg-purple-50', section: 'occupancy' },
-    { label: 'Occupied', value: `${totalOccupied}/${totalUnits}`, icon: <Users className="w-5 h-5" />, trend: { text: `${Math.round((totalOccupied/totalUnits)*100)}% occupancy`, positive: totalOccupied/totalUnits >= 0.9 }, color: 'text-green-600 bg-green-50', section: 'occupancy' },
-    { label: 'Monthly Revenue', value: `$${totalRevenue.toLocaleString()}`, icon: <DollarSign className="w-5 h-5" />, trend: { text: '↑ 9.1% YoY', positive: true }, color: 'text-emerald-600 bg-emerald-50', section: 'revenue' },
-    { label: 'Rent Collected', value: `${collectedCount}/${activeTenants.length}`, icon: <Receipt className="w-5 h-5" />, trend: overdueCount > 0 ? { text: `${overdueCount} overdue`, positive: false } : { text: 'All collected', positive: true }, color: overdueCount > 0 ? 'text-red-600 bg-red-50' : 'text-green-600 bg-green-50', section: 'rentroll' },
+  const NAV_ACTIONS = [
+    { label: 'Go to Dashboard', shortcut: 'G D', panel: 'dashboard' },
+    { label: 'Go to Properties', shortcut: 'G P', panel: 'properties' },
+    { label: 'Go to Units', shortcut: '', panel: 'units' },
+    { label: 'Go to Tenants', shortcut: 'G T', panel: 'tenants' },
+    { label: 'Go to Leases', shortcut: '', panel: 'leases' },
+    { label: 'Go to Maintenance', shortcut: 'G M', panel: 'maintenance' },
+    { label: 'Go to Payments', shortcut: 'G L', panel: 'payments' },
+    { label: 'Go to Reports', shortcut: 'G R', panel: 'reports' },
+    { label: 'Go to Messages', shortcut: '', panel: 'messages' },
+    { label: 'Go to Documents', shortcut: '', panel: 'documents' },
   ]
 
+  const q = query.toLowerCase()
+  const matchedActions = q ? NAV_ACTIONS.filter(a => a.label.toLowerCase().includes(q)) : NAV_ACTIONS.slice(0, 5)
+  const matchedTenants = q.length >= 2 ? tenants.filter(t => t.name.toLowerCase().includes(q) || t.email.toLowerCase().includes(q)).slice(0, 4) : []
+  const matchedProperties = q.length >= 2 ? properties.filter(p => p.name.toLowerCase().includes(q)).slice(0, 3) : []
+  const matchedTickets = q.length >= 2 ? tickets.filter(t => t.title.toLowerCase().includes(q) || t.tenantName.toLowerCase().includes(q)).slice(0, 3) : []
+
+  if (!open) return null
   return (
-    <div className="p-6 space-y-6 animate-slide-up">
-      {/* KPI cards */}
-      <div className="grid grid-cols-5 gap-4">
-        {kpis.map((k) => (
-          <button
-            key={k.label}
-            onClick={() => { setAnalyticsSection(k.section); setActivePanel('analytics') }}
-            className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 text-left hover:shadow-md hover:border-blue-200 transition-all cursor-pointer"
-          >
-            <div className="flex items-center justify-between mb-3">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{k.label}</p>
-              <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${k.color}`}>
-                {k.icon}
-              </div>
-            </div>
-            <p className="text-2xl font-bold text-gray-900">{k.value}</p>
-            {k.trend && (
-              <p className={`text-xs mt-1 font-medium ${k.trend.positive ? 'text-green-600' : 'text-red-600'}`}>
-                {k.trend.text}
-              </p>
-            )}
-          </button>
-        ))}
-      </div>
-
-      {/* Pending payment confirmations */}
-      {(() => {
-        const pending = rentRecords.filter(r => r.status === 'pending')
-        if (pending.length === 0) return null
-        return (
-          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-            <div className="flex items-center gap-2 mb-3">
-              <div className="w-7 h-7 bg-amber-100 rounded-lg flex items-center justify-center">
-                <DollarSign className="w-4 h-4 text-amber-600" />
-              </div>
-              <p className="font-semibold text-amber-900 text-sm">{pending.length} Payment{pending.length > 1 ? 's' : ''} Awaiting Confirmation</p>
-            </div>
-            <div className="space-y-2">
-              {pending.map(r => {
-                const t = tenants.find(x => x.id === r.tenantId)
-                return (
-                  <PendingPaymentRow key={r.id} record={r} tenantName={t?.name ?? 'Tenant'} onConfirm={onConfirmPayment} />
-                )
-              })}
-            </div>
-          </div>
-        )
-      })()}
-
-      {/* Two-column layout */}
-      <div className="grid grid-cols-5 gap-5">
-        {/* LEFT — 60% */}
-        <div className="col-span-3 space-y-5">
-          {/* Occupancy Trend */}
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h3 className="text-sm font-semibold text-gray-900">Occupancy Trend</h3>
-                <p className="text-xs text-gray-400 mt-0.5">
-                  {occTrendData.length > 0 ? `${occTrendData[occTrendData.length - 1].rate}% current` : 'No data'}
-                </p>
-              </div>
-              <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
-                {(['1M', '3M', '6M', '1Y'] as const).map(p => (
-                  <button
-                    key={p}
-                    onClick={() => setOccPeriod(p)}
-                    className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-all ${
-                      occPeriod === p ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-                    }`}
-                  >{p}</button>
-                ))}
-              </div>
-            </div>
-            <ResponsiveContainer width="100%" height={180}>
-              <AreaChart data={occTrendData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="occGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor={primaryColor} stopOpacity={0.18} />
-                    <stop offset="95%" stopColor={primaryColor} stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" vertical={false} />
-                <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
-                <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} unit="%" width={42} />
-                <Tooltip
-                  formatter={(v) => [`${v}%`, 'Occupancy']}
-                  contentStyle={{ borderRadius: 8, border: '1px solid #E5E7EB', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,.06)' }}
-                  cursor={{ stroke: '#E5E7EB', strokeWidth: 1 }}
-                />
-                <Area type="monotone" dataKey="rate" stroke={primaryColor} strokeWidth={2} fill="url(#occGrad)" dot={occPeriod === '1M' ? { r: 4, fill: primaryColor, strokeWidth: 0 } : false} activeDot={{ r: 5, fill: primaryColor, strokeWidth: 0 }} />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-
-          {/* Recent Tickets / Upcoming Inspections */}
-          {(() => {
-            const openTickets = tickets
-              .filter(t => t.status !== 'resolved')
-              .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-              .slice(0, 8)
-
-            const now = new Date()
-            const cutoff = new Date(now)
-            if (inspPeriod === 'week') cutoff.setDate(now.getDate() + 7)
-            else cutoff.setMonth(now.getMonth() + 1)
-            const upcomingInspections = dashInspections
-              .filter(i => {
-                if (!i.date) return false
-                const d = new Date(i.date)
-                return d >= now && d <= cutoff
-              })
-              .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-
-            const PRIORITY_META: Record<string, { badge: string; row: string; icon: string; dot: string }> = {
-              emergency: { badge: 'bg-red-100 text-red-700',    row: 'bg-red-50 border border-red-100',    icon: 'bg-red-100 text-red-600',    dot: 'bg-red-500' },
-              high:      { badge: 'bg-orange-100 text-orange-700', row: 'bg-orange-50 border border-orange-100', icon: 'bg-orange-100 text-orange-600', dot: 'bg-orange-500' },
-              medium:    { badge: 'bg-amber-100 text-amber-700', row: 'bg-amber-50 border border-amber-100', icon: 'bg-amber-100 text-amber-600', dot: 'bg-amber-400' },
-              low:       { badge: 'bg-gray-100 text-gray-600',   row: 'hover:bg-gray-50',                   icon: 'bg-gray-100 text-gray-500',   dot: 'bg-gray-300' },
-            }
-
-            return (
-              <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
-                {/* Tab bar */}
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex gap-1">
-                    <button
-                      onClick={() => setDashTab('tickets')}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${dashTab === 'tickets' ? 'text-white shadow-sm' : 'text-gray-500 hover:text-gray-700 bg-gray-100'}`}
-                      style={dashTab === 'tickets' ? { background: primaryColor } : {}}
-                    >
-                      Tickets {openTickets.length > 0 && <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[10px] ${dashTab === 'tickets' ? 'bg-white/20' : 'bg-gray-200 text-gray-600'}`}>{openTickets.length}</span>}
-                    </button>
-                    <button
-                      onClick={() => setDashTab('inspections')}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${dashTab === 'inspections' ? 'text-white shadow-sm' : 'text-gray-500 hover:text-gray-700 bg-gray-100'}`}
-                      style={dashTab === 'inspections' ? { background: primaryColor } : {}}
-                    >
-                      Inspections {upcomingInspections.length > 0 && <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[10px] ${dashTab === 'inspections' ? 'bg-white/20' : 'bg-gray-200 text-gray-600'}`}>{upcomingInspections.length}</span>}
-                    </button>
-                  </div>
-                  {dashTab === 'inspections' && (
-                    <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
-                      {(['week', 'month'] as const).map(p => (
-                        <button key={p} onClick={() => setInspPeriod(p)}
-                          className={`px-2.5 py-1 rounded-md text-xs font-semibold capitalize transition-all ${inspPeriod === p ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-                        >{p}</button>
-                      ))}
-                    </div>
-                  )}
-                  {dashTab === 'tickets' && (
-                    <button onClick={() => setActivePanel('maintenance')} className="text-xs font-semibold hover:underline" style={{ color: primaryColor }}>View all →</button>
-                  )}
-                </div>
-
-                {/* Tickets list */}
-                {dashTab === 'tickets' && (
-                  <div className="space-y-2">
-                    {openTickets.length === 0 ? (
-                      <div className="text-center py-8">
-                        <Wrench className="w-8 h-8 text-gray-200 mx-auto mb-2" />
-                        <p className="text-sm text-gray-400">No open tickets</p>
-                      </div>
-                    ) : openTickets.map(t => {
-                      const pm = PRIORITY_META[t.priority] ?? PRIORITY_META.low
-                      return (
-                        <div key={t.id} className={`flex items-start gap-3 p-2.5 rounded-xl transition-colors cursor-pointer ${pm.row}`} onClick={() => setActivePanel('maintenance')}>
-                          <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${pm.icon}`}>
-                            <Wrench className="w-3.5 h-3.5" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <p className="text-sm font-medium text-gray-900 truncate">{t.title}</p>
-                              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full uppercase ${pm.badge}`}>{t.priority}</span>
-                            </div>
-                            <p className="text-xs text-gray-500 mt-0.5">{t.property} · Unit {t.unit} · {t.tenantName}</p>
-                          </div>
-                          <span className={`text-[10px] font-semibold px-2 py-1 rounded-full shrink-0 ${t.status === 'in_progress' ? 'bg-white/60 text-amber-700' : 'bg-white/60 text-gray-600'}`}>
-                            {t.status === 'in_progress' ? 'In Progress' : 'Open'}
-                          </span>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-
-                {/* Inspections list */}
-                {dashTab === 'inspections' && (
-                  <div className="space-y-2">
-                    {upcomingInspections.length === 0 ? (
-                      <div className="text-center py-8">
-                        <ClipboardList className="w-8 h-8 text-gray-200 mx-auto mb-2" />
-                        <p className="text-sm text-gray-400">No inspections in the next {inspPeriod}</p>
-                        <button onClick={() => { setActivePanel('maintenance') }} className="mt-2 text-xs font-semibold hover:underline" style={{ color: primaryColor }}>Schedule one →</button>
-                      </div>
-                    ) : upcomingInspections.map(insp => {
-                      const typeInfo = INSPECTION_TYPES.find(x => x.value === insp.type)
-                      const d = new Date(insp.date)
-                      const isToday = d.toDateString() === now.toDateString()
-                      const isTomorrow = d.toDateString() === new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).toDateString()
-                      const dayLabel = isToday ? 'Today' : isTomorrow ? 'Tomorrow' : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-                      return (
-                        <div key={insp.id} className="flex items-start gap-3 p-2.5 rounded-xl hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => setActivePanel('maintenance')}>
-                          <div className="w-7 h-7 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-                            <ClipboardList className="w-3.5 h-3.5" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <p className="text-sm font-medium text-gray-900">{insp.property}</p>
-                              {insp.unit && <span className="text-xs text-gray-400">Unit {insp.unit}</span>}
-                              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${typeInfo?.color ?? 'bg-gray-100 text-gray-600'}`}>{typeInfo?.label ?? insp.type}</span>
-                            </div>
-                            <p className="text-xs text-gray-400 mt-0.5">
-                              {dayLabel}{insp.time ? ` at ${insp.time}` : ''}{insp.inspectorName ? ` · ${insp.inspectorName}` : ''}
-                            </p>
-                          </div>
-                          <span className={`text-[10px] font-semibold px-2 py-1 rounded-full shrink-0 ${isToday ? 'bg-amber-50 text-amber-700' : 'bg-blue-50 text-blue-700'}`}>
-                            {dayLabel}
-                          </span>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-            )
-          })()}
+    <div className="fixed inset-0 z-50 flex items-start justify-center pt-24 px-4" onClick={onClose}>
+      <div className="w-full max-w-lg bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100">
+          <Search className="w-4 h-4 text-gray-400 shrink-0" />
+          <input
+            ref={inputRef}
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            placeholder="Type a command or search…"
+            className="flex-1 text-sm bg-transparent focus:outline-none text-gray-900 placeholder-gray-400"
+          />
+          <kbd className="text-[10px] text-gray-400 border border-gray-200 rounded px-1.5 py-0.5">Esc</kbd>
         </div>
-
-        {/* RIGHT — 40% */}
-        <div className="col-span-2 space-y-5">
-          {/* Quick Actions */}
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-semibold text-gray-900">Quick Actions</h3>
-              <button
-                onClick={() => setEditQuickActions(!editQuickActions)}
-                className="w-7 h-7 rounded-lg hover:bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors"
-                title="Edit quick actions"
-              >
-                {editQuickActions ? <X className="w-4 h-4" /> : <Edit2 className="w-4 h-4" />}
-              </button>
-            </div>
-
-            {editQuickActions ? (
-              <div className="space-y-2 animate-fade-in">
-                {orderedActions.map((a, idx) => (
-                  <div key={a.id} className="flex items-center justify-between py-1.5">
-                    <div className={`flex items-center gap-2 text-sm font-medium ${hiddenActions.has(a.id) ? 'line-through text-gray-300' : 'text-gray-700'}`}>
-                      {a.icon}
-                      {a.label}
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => moveAction(a.id, 'up')}
-                        disabled={idx === 0}
-                        className="p-0.5 text-gray-400 hover:text-gray-600 disabled:opacity-20"
-                        title="Move up"
-                      >
-                        <ChevronUp className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => moveAction(a.id, 'down')}
-                        disabled={idx === orderedActions.length - 1}
-                        className="p-0.5 text-gray-400 hover:text-gray-600 disabled:opacity-20"
-                        title="Move down"
-                      >
-                        <ChevronDown className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => toggleHidden(a.id)}
-                        className="p-0.5 text-gray-400 hover:text-gray-600"
-                        title={hiddenActions.has(a.id) ? 'Show' : 'Hide'}
-                      >
-                        {hiddenActions.has(a.id) ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
-                    </div>
-                  </div>
-                ))}
-                <button
-                  onClick={() => setEditQuickActions(false)}
-                  className="w-full mt-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 rounded-xl text-sm transition-colors"
-                >
-                  Done
+        <div className="max-h-80 overflow-y-auto py-2">
+          {matchedActions.length > 0 && (
+            <div>
+              <p className="px-4 py-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Navigation</p>
+              {matchedActions.map(a => (
+                <button key={a.panel} onClick={() => { setActivePanel(a.panel); onClose() }}
+                  className="w-full flex items-center justify-between px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 text-left">
+                  <span>{a.label}</span>
+                  {a.shortcut && <kbd className="text-[10px] text-gray-400 border border-gray-200 rounded px-1.5 py-0.5">{a.shortcut}</kbd>}
                 </button>
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 gap-2">
-                {orderedActions.filter((a) => !hiddenActions.has(a.id)).map((a) => (
-                  <button
-                    key={a.id}
-                    onClick={() => handleQuickAction(a.id)}
-                    className="flex items-center gap-2 px-3 py-2.5 bg-gray-50 hover:bg-blue-50 hover:text-blue-700 rounded-xl text-sm font-medium text-gray-700 transition-colors text-left"
-                  >
-                    {a.icon}
-                    <span className="truncate">{a.label}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Rent Collection */}
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
-            <h3 className="text-sm font-semibold text-gray-900 mb-3">Rent Collection — {currentMonth}</h3>
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-sm text-gray-700 font-medium">{collectedCount} of {activeTenants.length} collected</p>
-              <span className={`text-xs font-bold ${overdueCount > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                {Math.round((collectedCount / (activeTenants.length || 1)) * 100)}%
-              </span>
+              ))}
             </div>
-            <div className="w-full h-2.5 bg-gray-100 rounded-full overflow-hidden">
-              <div
-                className={`h-full rounded-full transition-all ${overdueCount > 0 ? 'bg-amber-500' : 'bg-green-500'}`}
-                style={{ width: `${(collectedCount / (activeTenants.length || 1)) * 100}%` }}
-              />
+          )}
+          {matchedTenants.length > 0 && (
+            <div>
+              <p className="px-4 py-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider mt-1">Tenants</p>
+              {matchedTenants.map(t => (
+                <button key={t.id} onClick={() => { setActivePanel('tenants'); onClose() }}
+                  className="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 text-left">
+                  <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 font-bold text-xs flex items-center justify-center shrink-0">
+                    {t.name.charAt(0)}
+                  </div>
+                  <div>
+                    <p className="font-medium">{t.name}</p>
+                    <p className="text-[10px] text-gray-400">{t.property} · Unit {t.unit}</p>
+                  </div>
+                </button>
+              ))}
             </div>
-            {overdueCount > 0 ? (
-              <p className="text-xs text-red-500 mt-2 font-medium">⚠ {overdueCount} tenant{overdueCount > 1 ? 's' : ''} overdue — check Tenants panel</p>
-            ) : (
-              <p className="text-xs text-gray-400 mt-2">All payments received for this month</p>
-            )}
-          </div>
+          )}
+          {matchedProperties.length > 0 && (
+            <div>
+              <p className="px-4 py-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider mt-1">Properties</p>
+              {matchedProperties.map(p => (
+                <button key={p.id} onClick={() => { setActivePanel('properties'); onClose() }}
+                  className="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 text-left">
+                  <Building2 className="w-4 h-4 text-gray-400 shrink-0" />
+                  <span>{p.name}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          {matchedTickets.length > 0 && (
+            <div>
+              <p className="px-4 py-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider mt-1">Tickets</p>
+              {matchedTickets.map(t => (
+                <button key={t.id} onClick={() => { setActivePanel('maintenance'); onClose() }}
+                  className="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 text-left">
+                  <Wrench className="w-4 h-4 text-gray-400 shrink-0" />
+                  <div>
+                    <p className="font-medium">{t.title}</p>
+                    <p className="text-[10px] text-gray-400">{t.property} · {t.tenantName}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+          {q.length >= 2 && matchedTenants.length === 0 && matchedProperties.length === 0 && matchedTickets.length === 0 && matchedActions.length === 0 && (
+            <p className="px-4 py-4 text-sm text-gray-400 text-center">No results for "{query}"</p>
+          )}
         </div>
       </div>
     </div>
   )
 }
+
+interface DashboardPanelProps {
+  setActivePanel: (panel: string) => void
+  onShowInviteModal: () => void
+  onShowAddPropertyModal: () => void
+  onShowAnnouncementModal: () => void
+  tickets: MaintenanceTicket[]
+  tenants: Tenant[]
+  properties: Property[]
+  rentRecords: RentRecord[]
+  recentActivity: { id: string; type: string; text: string; time: string }[]
+}
+
+function DashboardPanel({
+  setActivePanel, onShowInviteModal, onShowAddPropertyModal,
+  onShowAnnouncementModal,
+  tickets, tenants, properties, rentRecords, recentActivity,
+}: DashboardPanelProps) {
+  const { primaryColor } = useBranding()
+  // ── Core metrics ────────────────────────────────────────────────────────────
+  const totalUnits = properties.reduce((s, p) => s + p.units, 0)
+  const totalOccupied = properties.reduce((s, p) => s + p.occupied, 0)
+  const currentMonth = new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+  const collectedIds = new Set(rentRecords.filter(r => r.month === currentMonth && r.status !== 'pending').map(r => r.tenantId))
+  const activeTenants = tenants.filter(t => t.status !== 'notice' && t.status !== 'past')
+  const rentCollectedMTD = rentRecords.filter(r => r.month === currentMonth && r.status !== 'pending').reduce((s, r) => s + r.amount, 0)
+  const openTickets = tickets.filter(t => t.status !== 'resolved')
+  const occupancyPct = totalUnits > 0 ? Math.round((totalOccupied / totalUnits) * 100) : 0
+
+  // ── Attention data ───────────────────────────────────────────────────────────
+  const attentionData = useMemo(() => {
+    const now = new Date()
+    const thisMonth = now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+    const todayDay = now.getDate()
+    const emergencyTickets = tickets.filter(t => t.priority === 'emergency' && t.status !== 'resolved')
+    const paidThisMonth = new Set(rentRecords.filter(r => r.month === thisMonth && r.status !== 'pending').map(r => r.tenantId))
+    const overdueRent = activeTenants.filter(t => !paidThisMonth.has(t.id) && todayDay > (t.rentDueDay ?? 1))
+    const expiringLeases = tenants
+      .filter(t => t.status !== 'past' && t.status !== 'invited' && t.leaseEnd)
+      .map(t => ({ ...t, daysLeft: Math.ceil((new Date(t.leaseEnd).getTime() - now.getTime()) / 86400000) }))
+      .filter(t => t.daysLeft >= 0 && t.daysLeft <= 60)
+      .sort((a, b) => a.daysLeft - b.daysLeft)
+    const vacantUnits = properties.flatMap(p => {
+      const n = p.units - p.occupied
+      return n > 0 ? Array.from({ length: n }, (_, i) => ({ propertyName: p.name, propertyId: p.id, idx: i })) : []
+    })
+    return { emergencyTickets, overdueRent, expiringLeases, vacantUnits }
+  }, [tickets, rentRecords, activeTenants, tenants, properties])
+
+  // ── Tasks (localStorage) ─────────────────────────────────────────────────────
+  const [tasks, setTasks] = useState<Array<{id: string; text: string; done: boolean}>>(() => {
+    try { return JSON.parse(localStorage.getItem('bmp_tasks') ?? '[]') } catch { return [] }
+  })
+  const [newTask, setNewTask] = useState('')
+  function saveTasks(next: typeof tasks) { setTasks(next); localStorage.setItem('bmp_tasks', JSON.stringify(next)) }
+  function addTask() {
+    if (!newTask.trim()) return
+    saveTasks([...tasks, { id: Date.now().toString(), text: newTask.trim(), done: false }])
+    setNewTask('')
+  }
+  function toggleTask(id: string) { saveTasks(tasks.map(t => t.id === id ? { ...t, done: !t.done } : t)) }
+  function removeTask(id: string) { saveTasks(tasks.filter(t => t.id !== id)) }
+
+  // ── Maintenance queue ────────────────────────────────────────────────────────
+  const PRIORITY_ORDER: Record<string, number> = { emergency: 0, high: 1, medium: 2, low: 3 }
+  const maintenanceQueue = [...openTickets]
+    .sort((a, b) => (PRIORITY_ORDER[a.priority] ?? 4) - (PRIORITY_ORDER[b.priority] ?? 4))
+    .slice(0, 6)
+
+  // ── Delinquent tenants ───────────────────────────────────────────────────────
+  const delinquent = attentionData.overdueRent
+    .map(t => ({ ...t, daysLate: Math.max(0, new Date().getDate() - (t.rentDueDay ?? 1)) }))
+    .sort((a, b) => b.daysLate - a.daysLate)
+
+  return (
+    <div className="h-full overflow-auto p-4 bg-gray-50 space-y-3">
+
+      {/* ── KPI Strip ──────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-4 gap-3">
+        {[
+          {
+            label: 'Occupancy',
+            value: `${occupancyPct}%`,
+            sub: `${totalOccupied} of ${totalUnits} units`,
+            ok: occupancyPct >= 90,
+            warn: occupancyPct >= 75,
+            icon: <Home className="w-4 h-4" />,
+            go: 'properties',
+          },
+          {
+            label: 'Rent Collected MTD',
+            value: `$${rentCollectedMTD.toLocaleString()}`,
+            sub: delinquent.length > 0 ? `${delinquent.length} delinquent` : 'All paid',
+            ok: delinquent.length === 0,
+            warn: false,
+            icon: <DollarSign className="w-4 h-4" />,
+            go: 'payments',
+          },
+          {
+            label: 'Open Tickets',
+            value: String(openTickets.length),
+            sub: attentionData.emergencyTickets.length > 0 ? `${attentionData.emergencyTickets.length} emergency` : 'No emergencies',
+            ok: openTickets.length === 0,
+            warn: openTickets.length > 0 && attentionData.emergencyTickets.length === 0,
+            icon: <Wrench className="w-4 h-4" />,
+            go: 'maintenance',
+          },
+          {
+            label: 'Lease Renewals',
+            value: String(attentionData.expiringLeases.length),
+            sub: (() => { const u = attentionData.expiringLeases.filter(t => t.daysLeft <= 30).length; return u > 0 ? `${u} in 30 days` : attentionData.expiringLeases.length > 0 ? 'In 60-day window' : 'None soon' })(),
+            ok: attentionData.expiringLeases.length === 0,
+            warn: attentionData.expiringLeases.length > 0 && attentionData.expiringLeases.filter(t => t.daysLeft <= 30).length === 0,
+            icon: <FileText className="w-4 h-4" />,
+            go: 'tenants',
+          },
+        ].map(kpi => {
+          const color = kpi.ok ? 'text-green-700' : kpi.warn ? 'text-amber-700' : 'text-red-700'
+          const bg = kpi.ok ? 'bg-green-50 border-green-200' : kpi.warn ? 'bg-amber-50 border-amber-200' : 'bg-red-50 border-red-200'
+          return (
+            <button key={kpi.label} onClick={() => setActivePanel(kpi.go)}
+              className={`border rounded-lg px-4 py-3 text-left hover:shadow-sm transition-all bg-white ${bg}`}
+            >
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{kpi.label}</span>
+                <span className={color}>{kpi.icon}</span>
+              </div>
+              <p className={`text-2xl font-bold leading-none ${color}`}>{kpi.value}</p>
+              <p className="text-xs text-gray-500 mt-1">{kpi.sub}</p>
+            </button>
+          )
+        })}
+      </div>
+
+      {/* ── Middle Row ─────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-3 gap-3">
+
+        {/* Delinquent Tenants */}
+        <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+          <div className="flex items-center justify-between px-3 py-2.5 border-b border-gray-100 bg-gray-50">
+            <div className="flex items-center gap-1.5">
+              {delinquent.length > 0 && <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />}
+              <span className="text-xs font-bold text-gray-700 uppercase tracking-wider">Delinquent</span>
+              {delinquent.length > 0 && <span className="text-[10px] font-bold bg-red-100 text-red-700 px-1.5 py-0.5 rounded-full">{delinquent.length}</span>}
+            </div>
+            <button onClick={() => setActivePanel('tenants')} className="text-[10px] font-semibold text-gray-400 hover:text-gray-600">View all</button>
+          </div>
+          <div className="divide-y divide-gray-50 max-h-52 overflow-y-auto">
+            {delinquent.length === 0 ? (
+              <div className="flex items-center gap-2 px-3 py-4 text-xs text-gray-400">
+                <CheckCircle className="w-3.5 h-3.5 text-green-400" /> All rent collected
+              </div>
+            ) : delinquent.slice(0, 8).map(t => (
+              <div key={t.id} className="flex items-center justify-between px-3 py-2 hover:bg-gray-50 cursor-pointer" onClick={() => setActivePanel('tenants')}>
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-gray-800 truncate">{t.name}</p>
+                  <p className="text-[10px] text-gray-400 truncate">{t.property} · Unit {t.unit}</p>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                  <span className="text-[10px] font-bold text-red-600">{t.daysLate}d</span>
+                  <span className="text-[10px] text-gray-500">${t.rent.toLocaleString()}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Maintenance Queue */}
+        <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+          <div className="flex items-center justify-between px-3 py-2.5 border-b border-gray-100 bg-gray-50">
+            <div className="flex items-center gap-1.5">
+              {attentionData.emergencyTickets.length > 0 && <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />}
+              <span className="text-xs font-bold text-gray-700 uppercase tracking-wider">Maintenance</span>
+              {openTickets.length > 0 && <span className="text-[10px] font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">{openTickets.length}</span>}
+            </div>
+            <button onClick={() => setActivePanel('maintenance')} className="text-[10px] font-semibold text-gray-400 hover:text-gray-600">View all</button>
+          </div>
+          <div className="divide-y divide-gray-50 max-h-52 overflow-y-auto">
+            {maintenanceQueue.length === 0 ? (
+              <div className="flex items-center gap-2 px-3 py-4 text-xs text-gray-400">
+                <CheckCircle className="w-3.5 h-3.5 text-green-400" /> No open tickets
+              </div>
+            ) : maintenanceQueue.map(t => {
+              const PCOLOR: Record<string, string> = { emergency: 'bg-red-500', high: 'bg-orange-500', medium: 'bg-amber-400', low: 'bg-gray-300' }
+              return (
+                <div key={t.id} className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer" onClick={() => setActivePanel('maintenance')}>
+                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${PCOLOR[t.priority] ?? 'bg-gray-300'}`} />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-semibold text-gray-800 truncate">{t.title}</p>
+                    <p className="text-[10px] text-gray-400 truncate">{t.property} · {t.unit}</p>
+                  </div>
+                  <span className={`text-[10px] font-bold px-1 rounded shrink-0 ${t.status === 'in_progress' ? 'text-blue-600 bg-blue-50' : 'text-gray-500 bg-gray-100'}`}>
+                    {t.status === 'in_progress' ? 'WIP' : 'Open'}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Today's Tasks */}
+        <div className="bg-white border border-gray-200 rounded-lg overflow-hidden flex flex-col">
+          <div className="flex items-center justify-between px-3 py-2.5 border-b border-gray-100 bg-gray-50">
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs font-bold text-gray-700 uppercase tracking-wider">Tasks</span>
+              {tasks.filter(t => !t.done).length > 0 && <span className="text-[10px] font-bold bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full">{tasks.filter(t => !t.done).length}</span>}
+            </div>
+            <span className="text-[10px] text-gray-400">{new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+          </div>
+          <div className="flex-1 max-h-44 overflow-y-auto divide-y divide-gray-50">
+            {tasks.length === 0 ? (
+              <div className="px-3 py-3 text-xs text-gray-400">No tasks — add one below</div>
+            ) : tasks.map(task => (
+              <div key={task.id} className="flex items-center gap-2 px-3 py-2 group hover:bg-gray-50">
+                <button onClick={() => toggleTask(task.id)} className="shrink-0">
+                  <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors ${task.done ? 'bg-green-500 border-green-500' : 'border-gray-300 hover:border-green-400'}`}>
+                    {task.done && <svg className="w-2 h-2" fill="none" viewBox="0 0 12 12"><path d="M2 6l3 3 5-5" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                  </div>
+                </button>
+                <span className={`text-xs flex-1 ${task.done ? 'line-through text-gray-400' : 'text-gray-700'}`}>{task.text}</span>
+                <button onClick={() => removeTask(task.id)} className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-300 hover:text-red-400">
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+          <div className="px-3 py-2 border-t border-gray-100 flex gap-1.5">
+            <input
+              value={newTask}
+              onChange={e => setNewTask(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && addTask()}
+              placeholder="Add task..."
+              className="flex-1 text-xs bg-gray-50 border border-gray-200 rounded px-2 py-1.5 focus:outline-none focus:border-blue-300"
+            />
+            <button onClick={addTask} disabled={!newTask.trim()} className="px-2 py-1.5 text-xs font-semibold text-white rounded disabled:opacity-40 transition-colors" style={{ background: primaryColor }}>
+              Add
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Bottom Row ─────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-3 gap-3">
+
+        {/* Recent Activity */}
+        <div className="col-span-2 bg-white border border-gray-200 rounded-lg overflow-hidden">
+          <div className="flex items-center justify-between px-3 py-2.5 border-b border-gray-100 bg-gray-50">
+            <span className="text-xs font-bold text-gray-700 uppercase tracking-wider">Recent Activity</span>
+            <span className="text-[10px] text-gray-400">{recentActivity.length} events</span>
+          </div>
+          <div className="max-h-56 overflow-y-auto divide-y divide-gray-50">
+            {recentActivity.length === 0 ? (
+              <div className="px-3 py-4 text-xs text-gray-400">No recent activity</div>
+            ) : recentActivity.slice(0, 12).map(a => (
+              <div key={a.id} className="flex items-start gap-2.5 px-3 py-2 hover:bg-gray-50">
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-400 mt-1.5 shrink-0" />
+                <p className="text-xs text-gray-700 flex-1 leading-snug">{a.text}</p>
+                <span className="text-[10px] text-gray-400 shrink-0 whitespace-nowrap">{a.time}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Expiring Leases */}
+        <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+          <div className="flex items-center justify-between px-3 py-2.5 border-b border-gray-100 bg-gray-50">
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs font-bold text-gray-700 uppercase tracking-wider">Expiring Leases</span>
+              {attentionData.expiringLeases.length > 0 && <span className="text-[10px] font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">{attentionData.expiringLeases.length}</span>}
+            </div>
+          </div>
+          <div className="max-h-56 overflow-y-auto divide-y divide-gray-50">
+            {attentionData.expiringLeases.length === 0 ? (
+              <div className="flex items-center gap-2 px-3 py-4 text-xs text-gray-400">
+                <CheckCircle className="w-3.5 h-3.5 text-green-400" /> None in 60 days
+              </div>
+            ) : attentionData.expiringLeases.slice(0, 8).map(t => (
+              <div key={t.id} className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer" onClick={() => setActivePanel('tenants')}>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-semibold text-gray-800 truncate">{t.name}</p>
+                  <p className="text-[10px] text-gray-400 truncate">{t.unit} · {t.property}</p>
+                </div>
+                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 ${t.daysLeft <= 14 ? 'bg-red-100 text-red-700' : t.daysLeft <= 30 ? 'bg-orange-100 text-orange-700' : 'bg-amber-100 text-amber-700'}`}>
+                  {t.daysLeft}d
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  )
+}
+
 
 // ─── Tenants Panel ────────────────────────────────────────────────────────────
 
@@ -4121,6 +4362,234 @@ function TenantsPanel({ tenants, setTenants, rentRecords, threads, setThreads, s
 
 // ─── Maintenance Panel ────────────────────────────────────────────────────────
 
+// ─── Recurring Schedules ─────────────────────────────────────────────────────
+
+function NewScheduleModal({ properties, onClose, onSaved }: { properties: Property[]; onClose: () => void; onSaved: (s: RecurringSchedule) => void }) {
+  const { primaryColor } = useBranding()
+  const [saving, setSaving] = useState(false)
+  const todayStr = new Date().toISOString().split('T')[0]
+  const [form, setForm] = useState({ propertyId: properties[0]?.id ?? '', title: '', frequency: 'monthly' as RecurringSchedule['frequency'], nextDue: todayStr })
+  const isUuid = (v: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v)
+
+  async function handleSave() {
+    if (!form.title.trim()) return
+    setSaving(true)
+    const { data: { user } } = await supabase.auth.getUser()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error } = await (supabase.from('maintenance_schedules') as any).insert({
+      pm_id: user?.id,
+      property_id: isUuid(form.propertyId) ? form.propertyId : null,
+      title: form.title.trim(),
+      frequency: form.frequency,
+      next_due: form.nextDue,
+    }).select().single()
+    if (error) {
+      if (isTableMissing(error)) {
+        showToast({ type: 'error', title: 'Run the Schedules SQL first', message: 'See Recurring tab for setup instructions' })
+      } else {
+        showToast({ type: 'error', title: 'Failed to save', message: error.message })
+      }
+      setSaving(false); return
+    }
+    onSaved(recurringScheduleFromRow(data as Record<string, unknown>))
+    setSaving(false)
+  }
+
+  return (
+    <ModalBackdrop onClose={onClose}>
+      <div className="bg-white rounded-xl border border-gray-200 shadow-lg w-full max-w-md animate-scale-in">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <h2 className="text-base font-bold text-gray-900">New Recurring Schedule</h2>
+          <button onClick={onClose} className="w-8 h-8 rounded-lg bg-gray-100 hover:bg-gray-200 flex items-center justify-center"><X className="w-4 h-4" /></button>
+        </div>
+        <div className="p-6 space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Task Title *</label>
+            <input autoFocus value={form.title} onChange={e => setForm(f => ({...f, title: e.target.value}))} placeholder="e.g. Replace HVAC filter, Gutter cleaning…"
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Property</label>
+            <select value={form.propertyId} onChange={e => setForm(f => ({...f, propertyId: e.target.value}))}
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+              <option value="">All properties</option>
+              {properties.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">Frequency</label>
+              <select value={form.frequency} onChange={e => setForm(f => ({...f, frequency: e.target.value as RecurringSchedule['frequency']}))}
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                {SCHEDULE_FREQUENCIES.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">First Due Date</label>
+              <input type="date" value={form.nextDue} onChange={e => setForm(f => ({...f, nextDue: e.target.value}))}
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+          </div>
+          <div className="flex gap-3 pt-2">
+            <button onClick={handleSave} disabled={saving || !form.title.trim()} className="flex-1 text-white py-2.5 rounded-xl text-sm font-bold hover:opacity-90 disabled:opacity-50" style={{ background: primaryColor }}>
+              {saving ? 'Saving…' : 'Create Schedule'}
+            </button>
+            <button onClick={onClose} className="px-4 py-2.5 rounded-xl text-sm font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200">Cancel</button>
+          </div>
+        </div>
+      </div>
+    </ModalBackdrop>
+  )
+}
+
+function SchedulesSubPanel({ properties, tickets, setTickets }: { properties: Property[]; tickets: MaintenanceTicket[]; setTickets: React.Dispatch<React.SetStateAction<MaintenanceTicket[]>> }) {
+  const { primaryColor } = useBranding()
+  const [schedules, setSchedules] = useState<RecurringSchedule[]>([])
+  const [loading, setLoading] = useState(true)
+  const [tableError, setTableError] = useState(false)
+  const [showNewModal, setShowNewModal] = useState(false)
+  const [runningId, setRunningId] = useState<string | null>(null)
+
+  async function fetchSchedules() {
+    setLoading(true)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error } = await (supabase.from('maintenance_schedules') as any).select('*, properties!property_id(name)').order('next_due')
+    if (isTableMissing(error)) { setTableError(true); setLoading(false); return }
+    setSchedules((data ?? []).map((r: Record<string, unknown>) => ({
+      ...recurringScheduleFromRow(r),
+      propertyName: (r.properties as Record<string, unknown> | null)?.name as string | undefined,
+    })))
+    setLoading(false)
+  }
+  useEffect(() => { fetchSchedules() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const today = new Date().toISOString().split('T')[0]
+
+  async function runNow(schedule: RecurringSchedule) {
+    setRunningId(schedule.id)
+    const { data: { user } } = await supabase.auth.getUser()
+    const { data, error } = await supabase.from('maintenance_requests').insert({
+      pm_id: user?.id,
+      title: schedule.title,
+      description: `Recurring task — ${SCHEDULE_FREQUENCIES.find(f => f.value === schedule.frequency)?.label ?? schedule.frequency} schedule`,
+      priority: 'medium',
+      status: 'open',
+    }).select().single()
+    if (error) { showToast({ type: 'error', title: 'Failed to create ticket', message: error.message }); setRunningId(null); return }
+    // Advance next_due
+    const freq = SCHEDULE_FREQUENCIES.find(f => f.value === schedule.frequency)
+    const nextDueDate = new Date(schedule.nextDue)
+    nextDueDate.setDate(nextDueDate.getDate() + (freq?.days ?? 30))
+    const nextDue = nextDueDate.toISOString().split('T')[0]
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase.from('maintenance_schedules') as any).update({ next_due: nextDue, last_run: today }).eq('id', schedule.id)
+    setSchedules(prev => prev.map(s => s.id === schedule.id ? { ...s, nextDue, lastRun: today } : s))
+    const newTicket: MaintenanceTicket = {
+      id: data.id, tenantId: '', tenantName: 'Unassigned', unit: '-',
+      property: schedule.propertyName ?? '-', category: 'Recurring',
+      title: schedule.title, description: data.description ?? '',
+      priority: 'medium', status: 'open',
+      createdAt: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+      createdAtIso: new Date().toISOString(),
+      updatedAt: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+    }
+    setTickets(prev => [newTicket, ...prev])
+    showToast({ type: 'success', title: `Ticket created for "${schedule.title}"` })
+    setRunningId(null)
+  }
+
+  async function deleteSchedule(id: string) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase.from('maintenance_schedules') as any).delete().eq('id', id)
+    setSchedules(prev => prev.filter(s => s.id !== id))
+    showToast({ type: 'success', title: 'Schedule removed' })
+  }
+
+  const freqColors: Record<string, string> = {
+    weekly: 'bg-blue-100 text-blue-700',
+    monthly: 'bg-purple-100 text-purple-700',
+    quarterly: 'bg-amber-100 text-amber-700',
+    annually: 'bg-green-100 text-green-700',
+  }
+
+  if (loading) return <div className="space-y-3">{[0,1,2].map(i => <div key={i} className="h-14 bg-gray-100 animate-pulse rounded-xl" />)}</div>
+
+  if (tableError) return (
+    <div className="bg-amber-50 border border-amber-200 rounded-xl p-5">
+      <p className="text-sm font-bold text-amber-900 mb-1">Schedules table not set up</p>
+      <p className="text-xs text-amber-700 mb-3">Run each statement separately in Supabase Dashboard → SQL Editor:</p>
+      <pre className="bg-white border border-amber-200 rounded-lg p-3 text-xs text-gray-800 overflow-x-auto whitespace-pre-wrap">{SCHEDULES_CREATE_SQL}</pre>
+    </div>
+  )
+
+  return (
+    <div className="space-y-4 animate-fade-in">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-gray-500">{schedules.length} recurring task{schedules.length !== 1 ? 's' : ''} · {schedules.filter(s => s.nextDue <= today).length} due</p>
+        <button onClick={() => setShowNewModal(true)} className="flex items-center gap-2 text-sm font-semibold text-white px-4 py-2 rounded-xl hover:opacity-90" style={{ background: primaryColor }}>
+          <Plus className="w-4 h-4" /> New Schedule
+        </button>
+      </div>
+
+      {schedules.length === 0 ? (
+        <div className="text-center py-12 bg-white rounded-xl border border-gray-200">
+          <Repeat className="w-8 h-8 text-gray-200 mx-auto mb-2" />
+          <p className="text-sm font-medium text-gray-500">No recurring schedules yet</p>
+          <p className="text-xs text-gray-400 mt-1">Set up HVAC filters, gutter cleaning, fire inspections, and more</p>
+          <button onClick={() => setShowNewModal(true)} className="mt-4 text-xs font-bold text-white px-4 py-2 rounded-xl" style={{ background: primaryColor }}>Create First Schedule</button>
+        </div>
+      ) : (
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 border-b border-gray-100">
+              <tr>{['Task','Property','Frequency','Next Due','Last Run',''].map(h => (
+                <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">{h}</th>
+              ))}</tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {schedules.map(s => {
+                const isDue = s.nextDue <= today
+                const daysUntil = Math.ceil((new Date(s.nextDue).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+                return (
+                  <tr key={s.id} className={`hover:bg-gray-50 transition-colors ${isDue ? 'bg-amber-50/40' : ''}`}>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        {isDue && <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse shrink-0" />}
+                        <span className="font-medium text-gray-900">{s.title}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-gray-600">{s.propertyName ?? <span className="text-gray-400 italic">All</span>}</td>
+                    <td className="px-4 py-3"><span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${freqColors[s.frequency] ?? 'bg-gray-100 text-gray-600'}`}>{s.frequency.charAt(0).toUpperCase() + s.frequency.slice(1)}</span></td>
+                    <td className="px-4 py-3">
+                      <p className="text-sm font-medium text-gray-900">{new Date(s.nextDue).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+                      {isDue
+                        ? <p className="text-xs text-amber-600 font-semibold">Overdue {Math.abs(daysUntil)}d</p>
+                        : <p className="text-xs text-gray-400">in {daysUntil}d</p>
+                      }
+                    </td>
+                    <td className="px-4 py-3 text-gray-500 text-xs">{s.lastRun ? new Date(s.lastRun).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : <span className="text-gray-300">Never</span>}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <button onClick={() => runNow(s)} disabled={runningId === s.id} className="text-xs font-semibold text-white px-3 py-1 rounded-lg disabled:opacity-50 hover:opacity-90" style={{ background: primaryColor }}>
+                          {runningId === s.id ? '…' : 'Run Now'}
+                        </button>
+                        <button onClick={() => deleteSchedule(s.id)} className="p-1 text-gray-400 hover:text-red-500 rounded-lg hover:bg-red-50">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {showNewModal && <NewScheduleModal properties={properties} onClose={() => setShowNewModal(false)} onSaved={s => { setSchedules(prev => [...prev, s]); setShowNewModal(false) }} />}
+    </div>
+  )
+}
+
 interface MaintenancePanelProps {
   tickets: MaintenanceTicket[]
   setTickets: React.Dispatch<React.SetStateAction<MaintenanceTicket[]>>
@@ -4130,11 +4599,11 @@ interface MaintenancePanelProps {
   addActivity?: (entry: { type: 'payment' | 'ticket' | 'tenant' | 'announcement' | 'lease'; text: string }) => void
   onViewTenant?: (tenantId: string) => void
   properties?: Property[]
-  initialSubTab?: 'tickets' | 'inspections'
+  initialSubTab?: 'tickets' | 'inspections' | 'schedules'
 }
 
 function MaintenancePanel({ tickets, setTickets, onShowNewTicketModal, focusedTicketId, onClearFocus, addActivity, onViewTenant, properties = [], initialSubTab = 'tickets' }: MaintenancePanelProps) {
-  const [mainTab, setMainTab] = useState<'tickets' | 'inspections'>(initialSubTab)
+  const [mainTab, setMainTab] = useState<'tickets' | 'inspections' | 'schedules'>(initialSubTab)
   const [filterStatus, setFilterStatus] = useState<'all' | 'open' | 'in_progress' | 'resolved'>('all')
   const [filterProperty, setFilterProperty] = useState('')
   const [filterPriority, setFilterPriority] = useState('')
@@ -4144,6 +4613,14 @@ function MaintenancePanel({ tickets, setTickets, onShowNewTicketModal, focusedTi
   const [editTicketId, setEditTicketId] = useState<string | null>(null)
   const [expandedTicketId, setExpandedTicketId] = useState<string | null>(focusedTicketId ?? null)
   const focusRef = useRef<HTMLTableRowElement>(null)
+
+  function slaBadge(iso?: string) {
+    if (!iso) return null
+    const hours = (Date.now() - new Date(iso).getTime()) / (1000 * 60 * 60)
+    if (hours < 24) return <span className="flex items-center gap-1 px-2 py-0.5 text-xs font-semibold rounded-full bg-green-100 text-green-700"><Clock className="w-3 h-3" />{Math.round(hours)}h</span>
+    if (hours < 72) return <span className="flex items-center gap-1 px-2 py-0.5 text-xs font-semibold rounded-full bg-amber-100 text-amber-700"><Clock className="w-3 h-3" />{Math.round(hours / 24)}d</span>
+    return <span className="flex items-center gap-1 px-2 py-0.5 text-xs font-semibold rounded-full bg-red-100 text-red-700"><Clock className="w-3 h-3" />{Math.round(hours / 24)}d</span>
+  }
 
   useEffect(() => {
     if (focusedTicketId) {
@@ -4293,11 +4770,22 @@ function MaintenancePanel({ tickets, setTickets, onShowNewTicketModal, focusedTi
         >
           <CheckCircle className="w-3.5 h-3.5" /> Inspections
         </button>
+        <button
+          onClick={() => setMainTab('schedules')}
+          className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors flex items-center gap-1.5 ${mainTab === 'schedules' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
+        >
+          <Repeat className="w-3.5 h-3.5" /> Recurring
+        </button>
       </div>
 
       {/* Inspections sub-panel */}
       {mainTab === 'inspections' && (
         <InspectionsSubPanel properties={properties} />
+      )}
+
+      {/* Recurring schedules sub-panel */}
+      {mainTab === 'schedules' && (
+        <SchedulesSubPanel properties={properties} tickets={tickets} setTickets={setTickets} />
       )}
 
       {/* Tickets content (only when tickets tab is active) */}
@@ -4408,6 +4896,7 @@ function MaintenancePanel({ tickets, setTickets, onShowNewTicketModal, focusedTi
               <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Tenant / Unit</th>
               <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Priority</th>
               <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
+              <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">SLA</th>
               <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Date</th>
               <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider"></th>
             </tr>
@@ -4438,6 +4927,7 @@ function MaintenancePanel({ tickets, setTickets, onShowNewTicketModal, focusedTi
                     </td>
                     <td className="px-5 py-3">{priorityBadge(t.priority)}</td>
                     <td className="px-5 py-3" onClick={e => e.stopPropagation()}>{statusBadge(t.status, t.id)}</td>
+                    <td className="px-5 py-3">{t.status !== 'resolved' ? slaBadge(t.createdAtIso) : null}</td>
                     <td className="px-5 py-3 text-sm text-gray-500">{t.createdAt}</td>
                     <td className="px-5 py-3" onClick={e => e.stopPropagation()}>
                       <div className="flex items-center gap-2">
@@ -4455,16 +4945,26 @@ function MaintenancePanel({ tickets, setTickets, onShowNewTicketModal, focusedTi
                   </tr>
                   {isExpanded && (
                     <tr key={`${t.id}-detail`} className="border-b border-gray-100">
-                      <td colSpan={7} className="px-5 py-4 bg-gray-50">
-                        <div className="grid grid-cols-3 gap-4">
-                          <div className="col-span-2">
-                            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Description</p>
-                            <p className="text-sm text-gray-700">{t.description || 'No description provided.'}</p>
+                      <td colSpan={8} className="px-5 py-4 bg-gray-50">
+                        <div className="grid grid-cols-3 gap-6">
+                          <div className="col-span-2 space-y-3">
+                            <div>
+                              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Description</p>
+                              <p className="text-sm text-gray-700">{t.description || 'No description provided.'}</p>
+                            </div>
+                            {(t.vendorName || t.assignedTo) && (
+                              <div className="flex items-center gap-4 pt-1">
+                                {t.vendorName && <div className="flex items-center gap-1.5 text-xs text-gray-600"><UserCheck className="w-3.5 h-3.5 text-gray-400" /><span className="font-semibold">{t.vendorName}</span></div>}
+                                {t.vendorPhone && <div className="flex items-center gap-1.5 text-xs text-gray-600"><Phone className="w-3.5 h-3.5 text-gray-400" />{t.vendorPhone}</div>}
+                                {t.assignedTo && <div className="flex items-center gap-1.5 text-xs text-gray-600"><Users className="w-3.5 h-3.5 text-gray-400" />Assigned to <span className="font-semibold">{t.assignedTo}</span></div>}
+                              </div>
+                            )}
                           </div>
                           <div className="space-y-2">
                             <div><p className="text-xs text-gray-400">Created</p><p className="text-sm font-medium text-gray-700">{t.createdAt}</p></div>
                             <div><p className="text-xs text-gray-400">Last Updated</p><p className="text-sm font-medium text-gray-700">{t.updatedAt}</p></div>
-                            {t.cost !== undefined && <div><p className="text-xs text-gray-400">Estimated Cost</p><p className="text-sm font-semibold text-gray-900">${t.cost}</p></div>}
+                            {t.estimatedCost != null && <div><p className="text-xs text-gray-400">Est. Cost</p><p className="text-sm font-semibold text-gray-900">${t.estimatedCost.toLocaleString()}</p></div>}
+                            {t.actualCost != null && <div><p className="text-xs text-gray-400">Actual Cost</p><p className="text-sm font-semibold text-gray-900">${t.actualCost.toLocaleString()}</p></div>}
                           </div>
                         </div>
                       </td>
@@ -4489,10 +4989,16 @@ function MaintenancePanel({ tickets, setTickets, onShowNewTicketModal, focusedTi
             setTickets(prev => prev.map(t => t.id === updated.id ? updated : t))
             showToast({ type: 'success', title: `Ticket ${updated.id} updated` })
             addActivity?.({ type: 'ticket', text: `${updated.tenantName} · ${updated.title} updated` })
-            await supabase.from('maintenance_requests').update({
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            await (supabase.from('maintenance_requests') as any).update({
               priority: updated.priority,
               description: updated.description,
               status: updated.status,
+              assigned_to: updated.assignedTo ?? null,
+              vendor_name: updated.vendorName ?? null,
+              vendor_phone: updated.vendorPhone ?? null,
+              estimated_cost: updated.estimatedCost ?? null,
+              actual_cost: updated.actualCost ?? null,
               updated_at: new Date().toISOString(),
             }).eq('id', updated.id)
             setEditTicketId(null)
@@ -4520,6 +5026,33 @@ interface PropertiesPanelProps {
 function PropertiesPanel({ properties, tenants, tickets, onShowAddPropertyModal, onManageProperty, onViewTicket, onViewTenant }: PropertiesPanelProps) {
   const [expandedPropertyId, setExpandedPropertyId] = useState<string | null>(null)
   const [viewTicketsProperty, setViewTicketsProperty] = useState<Property | null>(null)
+  const [unitsByPropId, setUnitsByPropId] = useState<Record<string, DBUnit[]>>({})
+  const [loadingUnits, setLoadingUnits] = useState<Record<string, boolean>>({})
+  const [unitDetailInfo, setUnitDetailInfo] = useState<{ unit: DBUnit; property: Property } | null>(null)
+  const [dashboardInspections, setDashboardInspections] = useState<Inspection[]>([])
+
+  useEffect(() => {
+    supabase.from('inspections').select('*').then(({ data }) => {
+      if (data) setDashboardInspections(data.map((r: Record<string, unknown>) => ({
+        id: r.id as string, property: r.property as string, propertyId: r.property_id as string,
+        unit: r.unit as string, type: r.type as Inspection['type'], date: (r.date as string) ?? '',
+        time: (r.time as string) ?? '', inspectorName: r.inspector_name as string,
+        inspectorPhone: r.inspector_phone as string, durationEstimate: r.duration_estimate as string,
+        entryNoticeSent: r.entry_notice_sent as boolean, accessInstructions: r.access_instructions as string,
+        checklistItems: r.checklist_items as string, findings: r.findings as string,
+        followUpActions: r.follow_up_actions as string, status: r.status as Inspection['status'],
+        createdAt: r.created_at as string,
+      })))
+    })
+  }, [])
+
+  async function fetchUnits(propertyId: string) {
+    if (unitsByPropId[propertyId] || loadingUnits[propertyId]) return
+    setLoadingUnits(prev => ({ ...prev, [propertyId]: true }))
+    const { data } = await supabase.from('units').select('*').eq('property_id', propertyId).order('unit_number')
+    setUnitsByPropId(prev => ({ ...prev, [propertyId]: (data ?? []).map(dbUnitFromRow) }))
+    setLoadingUnits(prev => ({ ...prev, [propertyId]: false }))
+  }
 
   const totalUnits = properties.reduce((s, p) => s + p.units, 0)
   const totalOccupied = properties.reduce((s, p) => s + p.occupied, 0)
@@ -4588,22 +5121,57 @@ function PropertiesPanel({ properties, tenants, tickets, onShowAddPropertyModal,
                 ))}
               </div>
 
-              {/* Expandable tenants */}
+              {/* Units grid toggle */}
               <button
-                onClick={() => setExpandedPropertyId(expanded ? null : p.id)}
-                className="text-xs text-blue-600 hover:text-blue-700 font-semibold mb-3"
+                onClick={() => {
+                  const next = expanded ? null : p.id
+                  setExpandedPropertyId(next)
+                  if (next) fetchUnits(p.id)
+                }}
+                className="text-xs font-semibold mb-3 flex items-center gap-1"
+                style={{ color: '#2563EB' }}
               >
-                {expanded ? 'Hide Tenants' : `View Tenants (${propTenants.length})`}
+                <Home className="w-3.5 h-3.5" />
+                {expanded ? 'Hide Units' : `View Units (${p.units})`}
               </button>
               {expanded && (
-                <div className="mb-3 space-y-1 animate-fade-in">
-                  {propTenants.map(t => (
-                    <div key={t.id} className="flex items-center justify-between text-xs py-1 border-b border-gray-50">
-                      <button onClick={() => onViewTenant(t.id)} className="font-medium text-blue-600 hover:underline text-left">{t.name}</button>
-                      <span className="text-gray-500">Unit {t.unit}</span>
-                      <span className="font-semibold text-gray-700">${t.rent.toLocaleString()}/mo</span>
+                <div className="mb-3 animate-fade-in">
+                  {loadingUnits[p.id] ? (
+                    <div className="grid grid-cols-3 gap-2">{[0,1,2].map(i => <div key={i} className="h-16 bg-gray-100 animate-pulse rounded-xl" />)}</div>
+                  ) : (unitsByPropId[p.id] ?? []).length > 0 ? (
+                    <div className="grid grid-cols-3 gap-2">
+                      {(unitsByPropId[p.id] ?? []).map(u => {
+                        const tenant = tenants.find(t => t.unit === u.unitNumber && t.property === p.name && t.status !== 'past')
+                        const sm = UNIT_STATUSES.find(s => s.value === (u.status ?? 'vacant')) ?? UNIT_STATUSES[1]
+                        return (
+                          <button
+                            key={u.id}
+                            onClick={() => setUnitDetailInfo({ unit: u, property: p })}
+                            className="text-left p-2.5 rounded-xl border border-gray-100 hover:border-gray-300 hover:shadow-sm transition-all bg-gray-50 hover:bg-white"
+                          >
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-sm font-bold text-gray-900">{u.unitNumber}</span>
+                              <span className={`w-2 h-2 rounded-full ${sm.dot}`} />
+                            </div>
+                            <p className="text-[10px] font-semibold truncate" style={{ color: sm.value === 'occupied' ? '#16A34A' : sm.value === 'maintenance' ? '#D97706' : '#6B7280' }}>
+                              {tenant ? tenant.name.split(' ')[0] : sm.label}
+                            </p>
+                            {u.rentAmount && <p className="text-[10px] text-gray-400">${u.rentAmount.toLocaleString()}/mo</p>}
+                          </button>
+                        )
+                      })}
                     </div>
-                  ))}
+                  ) : (
+                    <div className="space-y-1">
+                      {propTenants.map(t => (
+                        <div key={t.id} className="flex items-center justify-between text-xs py-1.5 px-2 rounded-lg hover:bg-gray-50">
+                          <button onClick={() => onViewTenant(t.id)} className="font-medium text-blue-600 hover:underline text-left">{t.name}</button>
+                          <span className="text-gray-500">Unit {t.unit}</span>
+                          <span className="font-semibold text-gray-700">${t.rent.toLocaleString()}/mo</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -4635,7 +5203,486 @@ function PropertiesPanel({ properties, tenants, tickets, onShowAddPropertyModal,
           onViewTicket={(ticketId) => { onViewTicket(ticketId); setViewTicketsProperty(null) }}
         />
       )}
+      {unitDetailInfo && (
+        <UnitDetailSheet
+          unit={unitDetailInfo.unit}
+          property={unitDetailInfo.property}
+          tenants={tenants}
+          tickets={tickets}
+          inspections={dashboardInspections}
+          onClose={() => setUnitDetailInfo(null)}
+          onViewTenant={(id) => { setUnitDetailInfo(null); onViewTenant(id) }}
+        />
+      )}
     </div>
+  )
+}
+
+// ─── Unit Detail Sheet ────────────────────────────────────────────────────────
+
+function UnitDetailSheet({
+  unit: initialUnit, property, tenants, tickets, inspections, onClose, onViewTenant,
+}: {
+  unit: DBUnit
+  property: Property
+  tenants: Tenant[]
+  tickets: MaintenanceTicket[]
+  inspections: Inspection[]
+  onClose: () => void
+  onViewTenant: (id: string) => void
+}) {
+  const { primaryColor } = useBranding()
+  const [visible, setVisible] = useState(false)
+  const [tab, setTab] = useState<'overview' | 'tenant' | 'maintenance' | 'documents'>('overview')
+  const [unit, setUnit] = useState<DBUnit>(initialUnit)
+  const [editing, setEditing] = useState(false)
+  const [editForm, setEditForm] = useState({ ...initialUnit })
+  const [saving, setSaving] = useState(false)
+  const [photos, setPhotos] = useState<{ url: string; path: string }[]>([])
+  const [uploadingPhoto, setUploadingPhoto] = useState(false)
+  const photoInputRef = useRef<HTMLInputElement>(null)
+  const [docs, setDocs] = useState<{ id: string; name: string; type: string; url: string | null }[]>([])
+
+  const currentTenant = tenants.find(t => t.unit === unit.unitNumber && t.property === property.name && t.status !== 'past')
+  const unitTickets = tickets.filter(t => t.unit === unit.unitNumber && t.property === property.name && t.status !== 'resolved')
+  const unitInspections = inspections.filter(i => i.unit === unit.unitNumber && i.property === property.name)
+    .sort((a, b) => new Date(b.date ?? b.createdAt).getTime() - new Date(a.date ?? a.createdAt).getTime())
+
+  const statusMeta = UNIT_STATUSES.find(s => s.value === unit.status) ?? UNIT_STATUSES[1]
+
+  useEffect(() => { requestAnimationFrame(() => setVisible(true)) }, [])
+
+  function handleClose() { setVisible(false); setTimeout(onClose, 280) }
+
+  async function handleSave() {
+    setSaving(true)
+    const payload: Record<string, unknown> = {
+      unit_number: editForm.unitNumber,
+      bedrooms: editForm.bedrooms,
+      bathrooms: editForm.bathrooms,
+      sqft: editForm.sqft,
+      rent_amount: editForm.rentAmount,
+      status: editForm.status,
+    }
+    // Extended columns — graceful if they don't exist yet
+    try {
+      Object.assign(payload, {
+        market_rent: editForm.marketRent,
+        notes: editForm.notes,
+        parking_spot: editForm.parkingSpot,
+        utility_info: editForm.utilityInfo,
+      })
+    } catch { /* ignore */ }
+    const { error } = await supabase.from('units').update(payload).eq('id', unit.id)
+    if (!error) {
+      setUnit({ ...editForm })
+      setEditing(false)
+      showToast({ type: 'success', title: 'Unit updated' })
+    } else {
+      // Retry without extended columns if they don't exist
+      const { error: e2 } = await supabase.from('units').update({
+        unit_number: editForm.unitNumber,
+        bedrooms: editForm.bedrooms,
+        bathrooms: editForm.bathrooms,
+        sqft: editForm.sqft,
+        rent_amount: editForm.rentAmount,
+        status: editForm.status,
+      }).eq('id', unit.id)
+      if (!e2) { setUnit({ ...editForm }); setEditing(false); showToast({ type: 'success', title: 'Unit updated' }) }
+      else showToast({ type: 'error', title: 'Failed to save', message: e2.message })
+    }
+    setSaving(false)
+  }
+
+  // Load photos from storage
+  useEffect(() => {
+    supabase.storage.from('unit-photos').list(`${unit.id}/`, { limit: 20 }).then(({ data }) => {
+      if (!data) return
+      const items = data.filter(f => f.name !== '.emptyFolderPlaceholder').map(f => {
+        const { data: { publicUrl } } = supabase.storage.from('unit-photos').getPublicUrl(`${unit.id}/${f.name}`)
+        return { url: publicUrl, path: `${unit.id}/${f.name}` }
+      })
+      setPhotos(items)
+    })
+  }, [unit.id])
+
+  // Load documents for this unit
+  useEffect(() => {
+    supabase.from('documents').select('id,name,type,storage_path').eq('property_id', unit.propertyId).then(({ data }) => {
+      if (data) setDocs(data.map(d => ({ id: d.id, name: d.name, type: d.type, url: d.storage_path })))
+    })
+  }, [unit.propertyId])
+
+  async function uploadPhoto(file: File) {
+    setUploadingPhoto(true)
+    const ext = file.name.split('.').pop()
+    const path = `${unit.id}/${Date.now()}.${ext}`
+    const { error } = await supabase.storage.from('unit-photos').upload(path, file)
+    if (!error) {
+      const { data: { publicUrl } } = supabase.storage.from('unit-photos').getPublicUrl(path)
+      setPhotos(prev => [...prev, { url: publicUrl, path }])
+      showToast({ type: 'success', title: 'Photo uploaded' })
+    } else {
+      showToast({ type: 'error', title: 'Upload failed', message: error.message })
+    }
+    setUploadingPhoto(false)
+  }
+
+  async function deletePhoto(path: string) {
+    await supabase.storage.from('unit-photos').remove([path])
+    setPhotos(prev => prev.filter(p => p.path !== path))
+  }
+
+  const rentVsMarket = unit.rentAmount && unit.marketRent
+    ? ((unit.rentAmount - unit.marketRent) / unit.marketRent) * 100
+    : null
+
+  return (
+    <>
+      <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40 transition-opacity duration-300" style={{ opacity: visible ? 1 : 0 }} onClick={handleClose} />
+      <div className="fixed right-0 top-0 h-full w-full max-w-xl bg-white z-50 flex flex-col shadow-2xl transition-transform duration-300 ease-out" style={{ transform: visible ? 'translateX(0)' : 'translateX(100%)' }}>
+
+        {/* Header */}
+        <div className="flex items-start justify-between px-6 py-5 border-b border-gray-100 shrink-0" style={{ background: primaryColor }}>
+          <div>
+            <p className="text-xs font-bold text-white/60 uppercase tracking-widest mb-1">{property.name}</p>
+            <h2 className="text-2xl font-black text-white">Unit {unit.unitNumber}</h2>
+            <div className="flex items-center gap-2 mt-1">
+              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold ${statusMeta.color}`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${statusMeta.dot}`} />
+                {statusMeta.label}
+              </span>
+              {unit.rentAmount && <span className="text-white/80 text-sm font-semibold">${unit.rentAmount.toLocaleString()}/mo</span>}
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {!editing && (
+              <button onClick={() => { setEditing(true); setEditForm({ ...unit }) }} className="px-3 py-1.5 bg-white/15 hover:bg-white/25 rounded-lg text-xs font-bold text-white transition-colors flex items-center gap-1.5">
+                <Pencil className="w-3.5 h-3.5" /> Edit
+              </button>
+            )}
+            <button onClick={handleClose} className="w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* Quick specs bar */}
+        <div className="grid grid-cols-4 border-b border-gray-100 shrink-0 bg-gray-50">
+          {[
+            { icon: <BedDouble className="w-3.5 h-3.5" />, value: unit.bedrooms != null ? `${unit.bedrooms} bed` : '—', label: 'Beds' },
+            { icon: <Bath className="w-3.5 h-3.5" />, value: unit.bathrooms != null ? `${unit.bathrooms} bath` : '—', label: 'Baths' },
+            { icon: <Maximize2 className="w-3.5 h-3.5" />, value: unit.sqft ? `${unit.sqft.toLocaleString()} ft²` : '—', label: 'Size' },
+            { icon: <Star className="w-3.5 h-3.5" />, value: unit.marketRent ? `$${unit.marketRent.toLocaleString()}` : '—', label: 'Market Rent' },
+          ].map(s => (
+            <div key={s.label} className="px-3 py-3 text-center border-r border-gray-100 last:border-r-0">
+              <div className="flex items-center justify-center gap-1 text-gray-400 mb-0.5">{s.icon}</div>
+              <p className="text-sm font-bold text-gray-900">{s.value}</p>
+              <p className="text-[10px] text-gray-400">{s.label}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Tabs */}
+        <div className="flex border-b border-gray-100 px-6 shrink-0 bg-white">
+          {(['overview', 'tenant', 'maintenance', 'documents'] as const).map(t => (
+            <button key={t} onClick={() => setTab(t)}
+              className={`px-4 py-3 text-sm font-semibold capitalize border-b-2 transition-colors ${tab === t ? 'border-b-2 text-white' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+              style={tab === t ? { borderColor: primaryColor, color: primaryColor } : {}}
+            >{t}</button>
+          ))}
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto">
+
+          {/* OVERVIEW */}
+          {tab === 'overview' && (
+            <div className="p-6 space-y-5">
+              {editing ? (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-600 mb-1">Unit Number</label>
+                      <input value={editForm.unitNumber} onChange={e => setEditForm(f => ({ ...f, unitNumber: e.target.value }))} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-600 mb-1">Status</label>
+                      <select value={editForm.status ?? 'vacant'} onChange={e => setEditForm(f => ({ ...f, status: e.target.value }))} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                        {UNIT_STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-600 mb-1">Bedrooms</label>
+                      <input type="number" min="0" value={editForm.bedrooms ?? ''} onChange={e => setEditForm(f => ({ ...f, bedrooms: e.target.value ? Number(e.target.value) : null }))} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-600 mb-1">Bathrooms</label>
+                      <input type="number" min="0" step="0.5" value={editForm.bathrooms ?? ''} onChange={e => setEditForm(f => ({ ...f, bathrooms: e.target.value ? Number(e.target.value) : null }))} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-600 mb-1">Sqft</label>
+                      <input type="number" min="0" value={editForm.sqft ?? ''} onChange={e => setEditForm(f => ({ ...f, sqft: e.target.value ? Number(e.target.value) : null }))} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-600 mb-1">Current Rent ($/mo)</label>
+                      <input type="number" min="0" value={editForm.rentAmount ?? ''} onChange={e => setEditForm(f => ({ ...f, rentAmount: e.target.value ? Number(e.target.value) : null }))} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-600 mb-1">Market Rent ($/mo)</label>
+                      <input type="number" min="0" value={editForm.marketRent ?? ''} onChange={e => setEditForm(f => ({ ...f, marketRent: e.target.value ? Number(e.target.value) : null }))} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Optional" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Parking Spot</label>
+                    <input value={editForm.parkingSpot ?? ''} onChange={e => setEditForm(f => ({ ...f, parkingSpot: e.target.value || null }))} placeholder="e.g. Spot #12, Garage Bay B" className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Utility Info</label>
+                    <input value={editForm.utilityInfo ?? ''} onChange={e => setEditForm(f => ({ ...f, utilityInfo: e.target.value || null }))} placeholder="e.g. Water included, electric metered separately" className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Notes</label>
+                    <textarea value={editForm.notes ?? ''} onChange={e => setEditForm(f => ({ ...f, notes: e.target.value || null }))} rows={3} placeholder="Internal notes about this unit…" className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
+                  </div>
+                  <div className="flex gap-2 pt-2">
+                    <button onClick={handleSave} disabled={saving} className="flex-1 text-white py-2.5 rounded-xl text-sm font-bold transition-opacity hover:opacity-90 disabled:opacity-50" style={{ background: primaryColor }}>
+                      {saving ? 'Saving…' : 'Save Changes'}
+                    </button>
+                    <button onClick={() => setEditing(false)} className="px-4 py-2.5 rounded-xl text-sm font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors">Cancel</button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {/* Rent vs market */}
+                  {unit.rentAmount && (
+                    <div className="bg-gray-50 rounded-xl p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Rent</p>
+                        {rentVsMarket != null && (
+                          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${rentVsMarket > 0 ? 'bg-green-100 text-green-700' : rentVsMarket < -5 ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'}`}>
+                            {rentVsMarket > 0 ? `+${rentVsMarket.toFixed(0)}% above market` : rentVsMarket < 0 ? `${Math.abs(rentVsMarket).toFixed(0)}% below market` : 'At market'}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-end gap-4">
+                        <div>
+                          <p className="text-2xl font-black text-gray-900">${unit.rentAmount.toLocaleString()}</p>
+                          <p className="text-xs text-gray-400">current rent/mo</p>
+                        </div>
+                        {unit.marketRent && (
+                          <div>
+                            <p className="text-lg font-bold text-gray-400">${unit.marketRent.toLocaleString()}</p>
+                            <p className="text-xs text-gray-400">market rate</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Info chips */}
+                  <div className="grid grid-cols-2 gap-3">
+                    {unit.parkingSpot && (
+                      <div className="flex items-center gap-2.5 bg-gray-50 rounded-xl p-3">
+                        <MapPin className="w-4 h-4 text-gray-400 shrink-0" />
+                        <div>
+                          <p className="text-[10px] font-semibold text-gray-400 uppercase">Parking</p>
+                          <p className="text-sm font-medium text-gray-900">{unit.parkingSpot}</p>
+                        </div>
+                      </div>
+                    )}
+                    {unit.utilityInfo && (
+                      <div className="flex items-center gap-2.5 bg-gray-50 rounded-xl p-3">
+                        <Zap className="w-4 h-4 text-gray-400 shrink-0" />
+                        <div>
+                          <p className="text-[10px] font-semibold text-gray-400 uppercase">Utilities</p>
+                          <p className="text-sm font-medium text-gray-900">{unit.utilityInfo}</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {unit.notes && (
+                    <div className="bg-amber-50 border border-amber-100 rounded-xl p-4">
+                      <p className="text-xs font-bold text-amber-700 uppercase tracking-wider mb-1">Notes</p>
+                      <p className="text-sm text-gray-700 whitespace-pre-wrap">{unit.notes}</p>
+                    </div>
+                  )}
+
+                  {!unit.parkingSpot && !unit.utilityInfo && !unit.notes && (
+                    <div className="text-center py-6">
+                      <p className="text-sm text-gray-400">No additional info added.</p>
+                      <button onClick={() => { setEditing(true); setEditForm({ ...unit }) }} className="mt-2 text-xs font-semibold hover:underline" style={{ color: primaryColor }}>Add details →</button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Photos section */}
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Photos</p>
+                  <button onClick={() => photoInputRef.current?.click()} disabled={uploadingPhoto} className="text-xs font-semibold hover:underline disabled:opacity-50 flex items-center gap-1" style={{ color: primaryColor }}>
+                    <ImageIcon className="w-3.5 h-3.5" /> {uploadingPhoto ? 'Uploading…' : 'Add Photo'}
+                  </button>
+                  <input ref={photoInputRef} type="file" accept="image/*" className="sr-only" onChange={e => { const f = e.target.files?.[0]; if (f) uploadPhoto(f) }} />
+                </div>
+                {photos.length === 0 ? (
+                  <button onClick={() => photoInputRef.current?.click()} className="w-full border-2 border-dashed border-gray-200 rounded-xl p-8 text-center hover:border-gray-300 transition-colors group">
+                    <ImageIcon className="w-8 h-8 text-gray-200 group-hover:text-gray-300 mx-auto mb-2 transition-colors" />
+                    <p className="text-sm text-gray-400">Click to upload unit photos</p>
+                  </button>
+                ) : (
+                  <div className="grid grid-cols-3 gap-2">
+                    {photos.map(p => (
+                      <div key={p.path} className="relative group aspect-square rounded-xl overflow-hidden bg-gray-100">
+                        <img src={p.url} alt="Unit photo" className="w-full h-full object-cover" />
+                        <button onClick={() => deletePhoto(p.path)} className="absolute top-1 right-1 w-6 h-6 bg-black/60 hover:bg-black/80 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                          <X className="w-3 h-3 text-white" />
+                        </button>
+                      </div>
+                    ))}
+                    <button onClick={() => photoInputRef.current?.click()} className="aspect-square rounded-xl border-2 border-dashed border-gray-200 flex items-center justify-center hover:border-gray-300 transition-colors">
+                      <Plus className="w-5 h-5 text-gray-300" />
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* TENANT */}
+          {tab === 'tenant' && (
+            <div className="p-6">
+              {currentTenant ? (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-4 p-4 bg-gray-50 rounded-xl">
+                    <div className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-lg shrink-0" style={{ background: primaryColor }}>
+                      {currentTenant.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-bold text-gray-900">{currentTenant.name}</p>
+                      <p className="text-xs text-gray-400">{currentTenant.email}</p>
+                      <p className="text-xs text-gray-400">{currentTenant.phone}</p>
+                    </div>
+                    <button onClick={() => { onViewTenant(currentTenant.id); handleClose() }} className="text-xs font-semibold hover:underline shrink-0" style={{ color: primaryColor }}>
+                      View Profile →
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    {[
+                      { label: 'Lease Start', value: currentTenant.moveIn || '—' },
+                      { label: 'Lease End', value: currentTenant.leaseEnd || '—' },
+                      { label: 'Monthly Rent', value: `$${currentTenant.rent.toLocaleString()}` },
+                      { label: 'Status', value: currentTenant.status.charAt(0).toUpperCase() + currentTenant.status.slice(1) },
+                    ].map(s => (
+                      <div key={s.label} className="bg-gray-50 rounded-xl p-3">
+                        <p className="text-xs text-gray-400">{s.label}</p>
+                        <p className="text-sm font-bold text-gray-900">{s.value}</p>
+                      </div>
+                    ))}
+                  </div>
+                  {currentTenant.rentDueDay && (
+                    <div className="flex items-center gap-2 text-xs text-gray-500 bg-gray-50 rounded-xl p-3">
+                      <DollarSign className="w-3.5 h-3.5" />
+                      Rent due on the {currentTenant.rentDueDay}{currentTenant.rentDueDay === 1 ? 'st' : currentTenant.rentDueDay === 2 ? 'nd' : currentTenant.rentDueDay === 3 ? 'rd' : 'th'} of each month
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
+                    <Users className="w-7 h-7 text-gray-300" />
+                  </div>
+                  <p className="font-bold text-gray-700 mb-1">Unit is Vacant</p>
+                  <p className="text-sm text-gray-400 mb-4">No active tenant assigned to this unit.</p>
+                  <button className="text-sm font-semibold text-white px-4 py-2 rounded-xl hover:opacity-90 transition-opacity" style={{ background: primaryColor }}>
+                    Invite Tenant
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* MAINTENANCE */}
+          {tab === 'maintenance' && (
+            <div className="p-6 space-y-4">
+              {/* Open tickets */}
+              <div>
+                <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Open Tickets</p>
+                {unitTickets.length === 0 ? (
+                  <div className="text-center py-8">
+                    <CheckCircle className="w-8 h-8 text-green-300 mx-auto mb-2" />
+                    <p className="text-sm text-gray-400">No open tickets for this unit</p>
+                  </div>
+                ) : unitTickets.map(t => {
+                  const pm = ({ emergency: 'bg-red-50 border-red-100 text-red-700', high: 'bg-orange-50 border-orange-100 text-orange-700', medium: 'bg-amber-50 border-amber-100 text-amber-700', low: 'bg-gray-50 border-gray-100 text-gray-600' } as Record<string, string>)[t.priority] ?? 'bg-gray-50 border-gray-100 text-gray-600'
+                  return (
+                    <div key={t.id} className={`border rounded-xl p-3 mb-2 ${pm}`}>
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm font-semibold">{t.title}</p>
+                        <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded-full bg-white/60">{t.priority}</span>
+                      </div>
+                      <p className="text-xs mt-0.5 opacity-70">{t.category} · {t.status.replace('_', ' ')}</p>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* Inspection history */}
+              <div>
+                <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Inspection History</p>
+                {unitInspections.length === 0 ? (
+                  <p className="text-sm text-gray-400 text-center py-4">No inspections recorded</p>
+                ) : unitInspections.slice(0, 5).map(i => {
+                  const typeMeta = INSPECTION_TYPES.find(x => x.value === i.type)
+                  return (
+                    <div key={i.id} className="flex items-center justify-between py-2.5 border-b border-gray-100 last:border-b-0">
+                      <div className="flex items-center gap-2.5">
+                        <ClipboardList className="w-4 h-4 text-gray-400" />
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">{typeMeta?.label ?? i.type}</p>
+                          <p className="text-xs text-gray-400">{i.date ? new Date(i.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}{i.inspectorName ? ` · ${i.inspectorName}` : ''}</p>
+                        </div>
+                      </div>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${INSPECTION_STATUSES.find(s => s.value === i.status)?.color ?? 'bg-gray-100 text-gray-500'}`}>{i.status}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* DOCUMENTS */}
+          {tab === 'documents' && (
+            <div className="p-6 space-y-3">
+              <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Property Documents</p>
+              {docs.length === 0 ? (
+                <div className="text-center py-8">
+                  <FileText className="w-8 h-8 text-gray-200 mx-auto mb-2" />
+                  <p className="text-sm text-gray-400">No documents linked to this property</p>
+                </div>
+              ) : docs.map(d => (
+                <div key={d.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl border border-gray-100">
+                  <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center shrink-0">
+                    <FileText className="w-4 h-4 text-blue-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">{d.name}</p>
+                    <p className="text-xs text-gray-400">{d.type}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+        </div>
+      </div>
+    </>
   )
 }
 
@@ -4896,37 +5943,111 @@ function DocumentsPanel({ onViewTenant, tenants, properties }: { onViewTenant?: 
 // ─── Edit Ticket Modal ────────────────────────────────────────────────────────
 
 function EditTicketModal({ ticket, onClose, onSave }: { ticket: MaintenanceTicket; onClose: () => void; onSave: (t: MaintenanceTicket) => void }) {
-  const [form, setForm] = useState({ issueType: ticket.category, priority: ticket.priority, description: ticket.description, status: ticket.status })
+  const { primaryColor } = useBranding()
+  const [form, setForm] = useState({
+    issueType: ticket.category,
+    priority: ticket.priority,
+    description: ticket.description,
+    status: ticket.status,
+    assignedTo: ticket.assignedTo ?? '',
+    vendorName: ticket.vendorName ?? '',
+    vendorPhone: ticket.vendorPhone ?? '',
+    estimatedCost: ticket.estimatedCost != null ? String(ticket.estimatedCost) : '',
+    actualCost: ticket.actualCost != null ? String(ticket.actualCost) : '',
+  })
+
   return (
     <ModalBackdrop onClose={onClose}>
-      <div className="bg-white rounded-xl border border-gray-200 shadow-lg w-full max-w-md animate-scale-in">
+      <div className="bg-white rounded-xl border border-gray-200 shadow-lg w-full max-w-lg max-h-[90vh] overflow-y-auto animate-scale-in">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-          <h2 className="text-lg font-bold text-gray-900">Edit Ticket {ticket.id}</h2>
+          <div>
+            <h2 className="text-base font-bold text-gray-900">Edit Ticket</h2>
+            <p className="text-xs text-gray-400 font-mono">{ticket.id}</p>
+          </div>
           <button onClick={onClose} className="w-8 h-8 rounded-lg bg-gray-100 hover:bg-gray-200 flex items-center justify-center"><X className="w-4 h-4" /></button>
         </div>
         <div className="p-6 space-y-4">
-          {[
-            { key: 'issueType', label: 'Issue Type', opts: ['Plumbing','Electrical','HVAC','Appliance','Structural','Other'] },
-            { key: 'priority', label: 'Priority', opts: ['low','medium','high','emergency'] },
-            { key: 'status', label: 'Status', opts: ['open','in_progress','resolved'] },
-          ].map(({ key, label, opts }) => (
-            <div key={key}>
-              <label className="block text-xs font-semibold text-gray-600 mb-1">{label}</label>
-              <select value={(form as Record<string,string>)[key]} onChange={e => setForm({...form, [key]: e.target.value})}
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
-                {opts.map(o => <option key={o}>{o}</option>)}
-              </select>
-            </div>
-          ))}
+          {/* Status / Priority / Type */}
+          <div className="grid grid-cols-3 gap-3">
+            {[
+              { key: 'issueType', label: 'Issue Type', opts: ['Plumbing','Electrical','HVAC','Appliance','Structural','Other'] },
+              { key: 'priority',  label: 'Priority',   opts: ['low','medium','high','emergency'] },
+              { key: 'status',    label: 'Status',     opts: ['open','in_progress','resolved'] },
+            ].map(({ key, label, opts }) => (
+              <div key={key}>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">{label}</label>
+                <select value={(form as Record<string,string>)[key]} onChange={e => setForm({...form, [key]: e.target.value})}
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                  {opts.map(o => <option key={o}>{o}</option>)}
+                </select>
+              </div>
+            ))}
+          </div>
+          {/* Description */}
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1">Description</label>
             <textarea value={form.description} onChange={e => setForm({...form, description: e.target.value})} rows={3}
               className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
           </div>
+          {/* Vendor assignment */}
+          <div className="border-t border-gray-100 pt-4">
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-1.5"><UserCheck className="w-3.5 h-3.5" />Vendor / Assignment</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Vendor / Company</label>
+                <input value={form.vendorName} onChange={e => setForm({...form, vendorName: e.target.value})} placeholder="e.g. Smith Plumbing Co."
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Vendor Phone</label>
+                <input value={form.vendorPhone} onChange={e => setForm({...form, vendorPhone: e.target.value})} placeholder="(555) 000-0000"
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div className="col-span-2">
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Assigned To (internal)</label>
+                <input value={form.assignedTo} onChange={e => setForm({...form, assignedTo: e.target.value})} placeholder="e.g. John (maintenance staff)"
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+            </div>
+          </div>
+          {/* Cost tracking */}
+          <div className="border-t border-gray-100 pt-4">
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-1.5"><DollarSign className="w-3.5 h-3.5" />Cost Tracking</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Estimated Cost</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+                  <input type="number" min="0" step="0.01" value={form.estimatedCost} onChange={e => setForm({...form, estimatedCost: e.target.value})} placeholder="0.00"
+                    className="w-full pl-7 pr-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Actual Cost</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+                  <input type="number" min="0" step="0.01" value={form.actualCost} onChange={e => setForm({...form, actualCost: e.target.value})} placeholder="0.00"
+                    className="w-full pl-7 pr-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+              </div>
+            </div>
+          </div>
           <div className="flex gap-3 pt-2">
             <button onClick={onClose} className="flex-1 border border-gray-200 hover:bg-gray-50 text-gray-700 font-semibold py-2.5 rounded-xl text-sm">Cancel</button>
-            <button onClick={() => onSave({ ...ticket, category: form.issueType, priority: form.priority as MaintenanceTicket['priority'], description: form.description, status: form.status as MaintenanceTicket['status'] })}
-              className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-xl text-sm">Save Changes</button>
+            <button onClick={() => onSave({
+              ...ticket,
+              category: form.issueType,
+              priority: form.priority as MaintenanceTicket['priority'],
+              description: form.description,
+              status: form.status as MaintenanceTicket['status'],
+              assignedTo: form.assignedTo || null,
+              vendorName: form.vendorName || null,
+              vendorPhone: form.vendorPhone || null,
+              estimatedCost: form.estimatedCost ? Number(form.estimatedCost) : null,
+              actualCost: form.actualCost ? Number(form.actualCost) : null,
+            })} className="flex-1 text-white font-semibold py-2.5 rounded-xl text-sm hover:opacity-90" style={{ background: primaryColor }}>
+              Save Changes
+            </button>
           </div>
         </div>
       </div>
@@ -4990,12 +6111,708 @@ function EditTenantModal({ tenant, properties, onClose, onSave }: { tenant: Tena
 
 // ─── Tenant Profile Modal ─────────────────────────────────────────────────────
 
+// ─── Lease Form Modal ─────────────────────────────────────────────────────────
+
+function LeaseFormModal({
+  tenant, mode, initial, onClose, onSaved,
+}: {
+  tenant: Tenant
+  mode: 'create' | 'edit' | 'renew'
+  initial?: Partial<Lease>
+  onClose: () => void
+  onSaved: (lease: Lease) => void
+}) {
+  const { user } = useAuth()
+  const { primaryColor } = useBranding()
+  const [saving, setSaving] = useState(false)
+  const [form, setForm] = useState({
+    startDate: initial?.startDate ?? '',
+    endDate: initial?.endDate ?? '',
+    rentAmount: initial?.rentAmount ?? tenant.rent,
+    securityDeposit: initial?.securityDeposit ?? null as number | null,
+    petDeposit: initial?.petDeposit ?? null as number | null,
+    depositReturned: initial?.depositReturned ?? null as number | null,
+    depositDeductions: initial?.depositDeductions ?? '',
+    escalationPct: initial?.escalationPct ?? null as number | null,
+    renewalOption: initial?.renewalOption ?? 'manual' as Lease['renewalOption'],
+    status: initial?.status ?? 'active' as Lease['status'],
+    notes: initial?.notes ?? '',
+  })
+  const [errors, setErrors] = useState<Record<string, string>>({})
+  function set<K extends keyof typeof form>(k: K, v: typeof form[K]) { setForm(f => ({ ...f, [k]: v })) }
+
+  const isUuid = (v: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v)
+
+  async function handleSave() {
+    const e: Record<string, string> = {}
+    if (!form.startDate) e.startDate = 'Required'
+    if (!form.endDate) e.endDate = 'Required'
+    if (!form.rentAmount || form.rentAmount <= 0) e.rentAmount = 'Required'
+    if (form.startDate && form.endDate && new Date(form.startDate) >= new Date(form.endDate)) e.endDate = 'Must be after start date'
+    if (Object.keys(e).length) { setErrors(e); return }
+    setSaving(true)
+    const payload = {
+      pm_id: user?.id,
+      tenant_id: isUuid(tenant.id) ? tenant.id : null,
+      property_name: tenant.property,
+      unit_number: tenant.unit,
+      start_date: form.startDate,
+      end_date: form.endDate,
+      rent_amount: form.rentAmount,
+      security_deposit: form.securityDeposit,
+      pet_deposit: form.petDeposit,
+      deposit_returned: form.depositReturned,
+      deposit_deductions: form.depositDeductions || null,
+      escalation_pct: form.escalationPct,
+      renewal_option: form.renewalOption,
+      status: form.status,
+      notes: form.notes || null,
+    }
+    if (initial?.id) {
+      const { data, error } = await supabase.from('leases').update(payload).eq('id', initial.id).select().single()
+      if (error) { showToast({ type: 'error', title: 'Failed to save', message: error.message }); setSaving(false); return }
+      onSaved(leaseFromRow(data as Record<string, unknown>))
+    } else {
+      const { data, error } = await supabase.from('leases').insert(payload).select().single()
+      if (error) { showToast({ type: 'error', title: 'Failed to save', message: error.message }); setSaving(false); return }
+      onSaved(leaseFromRow(data as Record<string, unknown>))
+    }
+    setSaving(false)
+  }
+
+  const titles = { create: 'New Lease', edit: 'Edit Lease', renew: 'Renew Lease' }
+  const leaseDays = form.startDate && form.endDate ? Math.round((new Date(form.endDate).getTime() - new Date(form.startDate).getTime()) / 86400000) : null
+  const leaseTerm = leaseDays ? leaseDays >= 350 ? '12 months' : leaseDays >= 170 ? '6 months' : leaseDays >= 80 ? '3 months' : `${leaseDays} days` : null
+  const nextRent = form.escalationPct && form.rentAmount ? Math.round(form.rentAmount * (1 + form.escalationPct / 100)) : null
+
+  return (
+    <ModalBackdrop onClose={onClose}>
+      <div className="bg-white rounded-xl border border-gray-200 shadow-lg w-full max-w-lg animate-scale-in">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <div>
+            <h2 className="text-base font-bold text-gray-900">{titles[mode]}</h2>
+            <p className="text-xs text-gray-400">{tenant.name} · Unit {tenant.unit} · {tenant.property}</p>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 rounded-lg bg-gray-100 hover:bg-gray-200 flex items-center justify-center"><X className="w-4 h-4" /></button>
+        </div>
+        <div className="p-6 space-y-5 max-h-[75vh] overflow-y-auto">
+
+          {/* Dates */}
+          <div>
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Lease Term {leaseTerm && <span className="text-blue-600 ml-1">· {leaseTerm}</span>}</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Start Date *</label>
+                <input type="date" value={form.startDate} onChange={e => set('startDate', e.target.value)} className={`w-full px-3 py-2 text-sm border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.startDate ? 'border-red-400' : 'border-gray-200'}`} />
+                {errors.startDate && <p className="text-xs text-red-500 mt-0.5">{errors.startDate}</p>}
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">End Date *</label>
+                <input type="date" value={form.endDate} onChange={e => set('endDate', e.target.value)} className={`w-full px-3 py-2 text-sm border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.endDate ? 'border-red-400' : 'border-gray-200'}`} />
+                {errors.endDate && <p className="text-xs text-red-500 mt-0.5">{errors.endDate}</p>}
+              </div>
+            </div>
+          </div>
+
+          {/* Rent + escalation */}
+          <div>
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Financials</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Monthly Rent *</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+                  <input type="number" min="0" value={form.rentAmount} onChange={e => set('rentAmount', Number(e.target.value))} className={`w-full pl-7 pr-3 py-2 text-sm border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.rentAmount ? 'border-red-400' : 'border-gray-200'}`} />
+                </div>
+                {errors.rentAmount && <p className="text-xs text-red-500 mt-0.5">{errors.rentAmount}</p>}
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Annual Escalation <span className="font-normal text-gray-400">(opt)</span></label>
+                <div className="relative">
+                  <input type="number" min="0" max="20" step="0.5" value={form.escalationPct ?? ''} onChange={e => set('escalationPct', e.target.value ? Number(e.target.value) : null)} placeholder="e.g. 3" className="w-full pl-3 pr-7 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">%</span>
+                </div>
+                {nextRent && <p className="text-[10px] text-green-600 mt-0.5">→ ${nextRent.toLocaleString()}/mo at renewal</p>}
+              </div>
+            </div>
+          </div>
+
+          {/* Deposits */}
+          <div>
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Deposits</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Security Deposit</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+                  <input type="number" min="0" value={form.securityDeposit ?? ''} onChange={e => set('securityDeposit', e.target.value ? Number(e.target.value) : null)} placeholder="0" className="w-full pl-7 pr-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Pet Deposit</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+                  <input type="number" min="0" value={form.petDeposit ?? ''} onChange={e => set('petDeposit', e.target.value ? Number(e.target.value) : null)} placeholder="0" className="w-full pl-7 pr-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+              </div>
+            </div>
+            {(initial?.id || mode === 'edit') && (
+              <div className="grid grid-cols-2 gap-3 mt-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Deposit Returned</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+                    <input type="number" min="0" value={form.depositReturned ?? ''} onChange={e => set('depositReturned', e.target.value ? Number(e.target.value) : null)} placeholder="0" className="w-full pl-7 pr-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Deduction Notes</label>
+                  <input value={form.depositDeductions} onChange={e => set('depositDeductions', e.target.value)} placeholder="e.g. Carpet cleaning $200" className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Renewal + Status */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">Renewal Option</label>
+              <select value={form.renewalOption} onChange={e => set('renewalOption', e.target.value as Lease['renewalOption'])} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                <option value="manual">Manual review</option>
+                <option value="auto">Auto-renew</option>
+                <option value="none">No renewal</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">Status</label>
+              <select value={form.status} onChange={e => set('status', e.target.value as Lease['status'])} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                <option value="draft">Draft</option>
+                <option value="active">Active</option>
+                <option value="expired">Expired</option>
+                <option value="renewed">Renewed</option>
+                <option value="terminated">Terminated</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Notes */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Internal Notes</label>
+            <textarea value={form.notes} onChange={e => set('notes', e.target.value)} rows={2} placeholder="Pet policy, special terms, addendums…" className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
+          </div>
+        </div>
+
+        <div className="px-6 pb-6 flex gap-3">
+          <button onClick={handleSave} disabled={saving} className="flex-1 text-white py-2.5 rounded-xl text-sm font-bold transition-opacity hover:opacity-90 disabled:opacity-50" style={{ background: primaryColor }}>
+            {saving ? 'Saving…' : mode === 'renew' ? 'Create Renewal' : 'Save Lease'}
+          </button>
+          <button onClick={onClose} className="px-4 py-2.5 rounded-xl text-sm font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors">Cancel</button>
+        </div>
+      </div>
+    </ModalBackdrop>
+  )
+}
+
+// ─── Lease Panel ──────────────────────────────────────────────────────────────
+
+function LeasePanel({ tenant }: { tenant: Tenant }) {
+  const { user } = useAuth()
+  const { primaryColor } = useBranding()
+  const [leases, setLeases] = useState<Lease[]>([])
+  const [loading, setLoading] = useState(true)
+  const [tableError, setTableError] = useState(false)
+  const [showForm, setShowForm] = useState(false)
+  const [formMode, setFormMode] = useState<'create' | 'edit' | 'renew'>('create')
+  const [editLease, setEditLease] = useState<Lease | null>(null)
+  const [sendingRenewal, setSendingRenewal] = useState<string | null>(null)
+
+  const isUuid = (v: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v)
+
+  async function fetchLeases() {
+    if (!isUuid(tenant.id)) { setLoading(false); return }
+    setLoading(true)
+    const { data, error } = await supabase.from('leases').select('*').eq('tenant_id', tenant.id).order('start_date', { ascending: false })
+    if (isTableMissing(error)) { setTableError(true); setLoading(false); return }
+    setLeases((data ?? []).map(r => leaseFromRow(r as Record<string, unknown>)))
+    setLoading(false)
+  }
+
+  useEffect(() => { fetchLeases() }, [tenant.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function sendRenewal(lease: Lease) {
+    setSendingRenewal(lease.id)
+    await supabase.from('leases').update({ renewal_sent_at: new Date().toISOString() }).eq('id', lease.id)
+    await notifyUser(tenant.id, {
+      type: 'lease',
+      title: 'Lease Renewal Notice',
+      body: `Your lease at ${lease.propertyName || tenant.property} Unit ${lease.unitNumber || tenant.unit} expires on ${new Date(lease.endDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}. Please contact us to discuss renewal options.`,
+      link: '/tenant',
+    })
+    showToast({ type: 'success', title: 'Renewal notice sent', message: `Notification sent to ${tenant.name}` })
+    setLeases(prev => prev.map(l => l.id === lease.id ? { ...l, renewalSentAt: new Date().toISOString() } : l))
+    setSendingRenewal(null)
+  }
+
+  const activeLease = leases.find(l => l.status === 'active')
+  const pastLeases = leases.filter(l => l.status !== 'active' && l.status !== 'draft')
+  const draftLeases = leases.filter(l => l.status === 'draft')
+  const now = new Date()
+
+  const daysUntilExpiry = activeLease ? Math.round((new Date(activeLease.endDate).getTime() - now.getTime()) / 86400000) : null
+  const showRenewalBanner = daysUntilExpiry !== null && daysUntilExpiry >= 0 && daysUntilExpiry <= 60
+  const totalDeposit = activeLease ? (activeLease.securityDeposit ?? 0) + (activeLease.petDeposit ?? 0) : 0
+  const nextRent = activeLease?.escalationPct && activeLease.rentAmount
+    ? Math.round(activeLease.rentAmount * (1 + activeLease.escalationPct / 100))
+    : null
+
+  const LEASE_STATUS_META: Record<string, { color: string; label: string }> = {
+    active:     { color: 'bg-green-100 text-green-700',  label: 'Active' },
+    draft:      { color: 'bg-gray-100 text-gray-600',    label: 'Draft' },
+    expired:    { color: 'bg-red-100 text-red-700',      label: 'Expired' },
+    renewed:    { color: 'bg-blue-100 text-blue-700',    label: 'Renewed' },
+    terminated: { color: 'bg-gray-100 text-gray-500',    label: 'Terminated' },
+  }
+
+  if (loading) return (
+    <div className="space-y-3 p-1">{[0,1,2].map(i => <div key={i} className="h-16 bg-gray-100 animate-pulse rounded-xl" />)}</div>
+  )
+
+  if (tableError) return (
+    <div className="bg-amber-50 border border-amber-200 rounded-xl p-5">
+      <p className="text-sm font-bold text-amber-900 mb-1">Leases table not set up</p>
+      <p className="text-xs text-amber-700 mb-3">Run this SQL in your Supabase dashboard to enable lease tracking:</p>
+      <pre className="bg-white border border-amber-200 rounded-lg p-3 text-xs text-gray-800 overflow-x-auto whitespace-pre-wrap">{LEASE_CREATE_SQL}</pre>
+    </div>
+  )
+
+  return (
+    <div className="space-y-5">
+
+      {/* Renewal banner */}
+      {showRenewalBanner && activeLease && (
+        <div className={`rounded-xl p-4 border flex items-start gap-3 ${daysUntilExpiry <= 14 ? 'bg-red-50 border-red-200' : daysUntilExpiry <= 30 ? 'bg-orange-50 border-orange-200' : 'bg-amber-50 border-amber-200'}`}>
+          <AlertTriangle className={`w-5 h-5 mt-0.5 shrink-0 ${daysUntilExpiry <= 14 ? 'text-red-500' : daysUntilExpiry <= 30 ? 'text-orange-500' : 'text-amber-500'}`} />
+          <div className="flex-1">
+            <p className={`text-sm font-bold ${daysUntilExpiry <= 14 ? 'text-red-800' : daysUntilExpiry <= 30 ? 'text-orange-800' : 'text-amber-800'}`}>
+              Lease expires in {daysUntilExpiry} day{daysUntilExpiry !== 1 ? 's' : ''}
+            </p>
+            <p className={`text-xs mt-0.5 ${daysUntilExpiry <= 14 ? 'text-red-600' : daysUntilExpiry <= 30 ? 'text-orange-600' : 'text-amber-600'}`}>
+              Ends {new Date(activeLease.endDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+              {activeLease.renewalSentAt ? ` · Renewal notice sent ${new Date(activeLease.renewalSentAt).toLocaleDateString()}` : ''}
+            </p>
+          </div>
+          <div className="flex gap-2 shrink-0">
+            {!activeLease.renewalSentAt && (
+              <button
+                onClick={() => sendRenewal(activeLease)}
+                disabled={sendingRenewal === activeLease.id}
+                className="text-xs font-bold text-white px-3 py-1.5 rounded-lg disabled:opacity-50"
+                style={{ background: primaryColor }}
+              >
+                {sendingRenewal === activeLease.id ? 'Sending…' : 'Send Renewal'}
+              </button>
+            )}
+            <button
+              onClick={() => { setFormMode('renew'); setEditLease(null); setShowForm(true) }}
+              className="text-xs font-bold px-3 py-1.5 rounded-lg bg-white border border-gray-200 text-gray-700 hover:bg-gray-50"
+            >
+              Create Renewal
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Active lease card */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Current Lease</p>
+          <button
+            onClick={() => { setFormMode('create'); setEditLease(null); setShowForm(true) }}
+            className="text-xs font-semibold flex items-center gap-1 hover:underline"
+            style={{ color: primaryColor }}
+          >
+            <Plus className="w-3.5 h-3.5" /> New Lease
+          </button>
+        </div>
+
+        {!activeLease ? (
+          <div className="text-center py-10 border-2 border-dashed border-gray-200 rounded-xl">
+            <FileText className="w-8 h-8 text-gray-200 mx-auto mb-2" />
+            <p className="text-sm font-medium text-gray-500">No active lease on file</p>
+            <button onClick={() => { setFormMode('create'); setEditLease(null); setShowForm(true) }} className="mt-3 text-xs font-bold text-white px-4 py-2 rounded-xl" style={{ background: primaryColor }}>
+              Add Lease
+            </button>
+          </div>
+        ) : (
+          <div className="bg-gray-50 rounded-xl border border-gray-200 overflow-hidden">
+            {/* Lease header */}
+            <div className="px-4 py-3 flex items-center justify-between border-b border-gray-100">
+              <div className="flex items-center gap-2">
+                <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${LEASE_STATUS_META[activeLease.status]?.color}`}>{LEASE_STATUS_META[activeLease.status]?.label}</span>
+                <span className="text-xs text-gray-500">{activeLease.renewalOption === 'auto' ? 'Auto-renew' : activeLease.renewalOption === 'none' ? 'No renewal' : 'Manual review'}</span>
+              </div>
+              <button onClick={() => { setEditLease(activeLease); setFormMode('edit'); setShowForm(true) }} className="text-xs font-semibold text-gray-500 hover:text-gray-700 flex items-center gap-1">
+                <Pencil className="w-3 h-3" /> Edit
+              </button>
+            </div>
+            {/* Term + progress */}
+            <div className="px-4 py-3 border-b border-gray-100">
+              <div className="flex justify-between text-xs text-gray-500 mb-1.5">
+                <span>{new Date(activeLease.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                <span className={daysUntilExpiry !== null && daysUntilExpiry <= 30 ? 'font-bold text-orange-600' : ''}>
+                  {daysUntilExpiry !== null ? `${daysUntilExpiry > 0 ? `${daysUntilExpiry}d left` : 'Expired'}` : ''}
+                  {' '}{new Date(activeLease.endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                </span>
+              </div>
+              {daysUntilExpiry !== null && (() => {
+                const totalMs = new Date(activeLease.endDate).getTime() - new Date(activeLease.startDate).getTime()
+                const elapsedMs = now.getTime() - new Date(activeLease.startDate).getTime()
+                const pct = Math.min(100, Math.max(0, Math.round((elapsedMs / totalMs) * 100)))
+                return (
+                  <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                    <div className={`h-full rounded-full transition-all ${daysUntilExpiry <= 14 ? 'bg-red-500' : daysUntilExpiry <= 30 ? 'bg-orange-500' : 'bg-green-500'}`} style={{ width: `${pct}%` }} />
+                  </div>
+                )
+              })()}
+            </div>
+            {/* Stats grid */}
+            <div className="grid grid-cols-4 divide-x divide-gray-100">
+              {[
+                { label: 'Monthly Rent', value: `$${activeLease.rentAmount.toLocaleString()}` },
+                { label: 'Security Dep.', value: activeLease.securityDeposit ? `$${activeLease.securityDeposit.toLocaleString()}` : '—' },
+                { label: 'Pet Deposit', value: activeLease.petDeposit ? `$${activeLease.petDeposit.toLocaleString()}` : '—' },
+                { label: 'Escalation', value: activeLease.escalationPct ? `${activeLease.escalationPct}%` : 'None' },
+              ].map(s => (
+                <div key={s.label} className="px-3 py-2.5 text-center">
+                  <p className="text-sm font-bold text-gray-900">{s.value}</p>
+                  <p className="text-[10px] text-gray-400">{s.label}</p>
+                </div>
+              ))}
+            </div>
+            {/* Deposit held summary */}
+            {totalDeposit > 0 && (
+              <div className="px-4 py-3 border-t border-gray-100 bg-white">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-bold text-gray-700">Deposits Held: <span className="text-green-700">${totalDeposit.toLocaleString()}</span></p>
+                    {activeLease.depositReturned !== null && (
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        Returned: ${activeLease.depositReturned.toLocaleString()} · Retained: ${Math.max(0, totalDeposit - activeLease.depositReturned).toLocaleString()}
+                        {activeLease.depositDeductions && ` (${activeLease.depositDeductions})`}
+                      </p>
+                    )}
+                  </div>
+                  {nextRent && (
+                    <div className="text-right">
+                      <p className="text-xs text-gray-400">At renewal</p>
+                      <p className="text-sm font-bold text-blue-600">${nextRent.toLocaleString()}/mo</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+            {activeLease.notes && (
+              <div className="px-4 py-2.5 border-t border-gray-100 bg-amber-50">
+                <p className="text-xs text-amber-700">{activeLease.notes}</p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Draft renewals */}
+      {draftLeases.length > 0 && (
+        <div>
+          <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Draft Renewals</p>
+          <div className="space-y-2">
+            {draftLeases.map(l => (
+              <div key={l.id} className="flex items-center justify-between p-3 bg-blue-50 border border-blue-100 rounded-xl">
+                <div>
+                  <p className="text-sm font-semibold text-gray-900">${l.rentAmount.toLocaleString()}/mo</p>
+                  <p className="text-xs text-gray-500">{new Date(l.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} → {new Date(l.endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">Draft</span>
+                  <button onClick={() => { setEditLease(l); setFormMode('edit'); setShowForm(true) }} className="text-xs font-semibold hover:underline" style={{ color: primaryColor }}>Edit</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Lease history */}
+      {pastLeases.length > 0 && (
+        <div>
+          <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Lease History</p>
+          <div className="space-y-2">
+            {pastLeases.map(l => (
+              <div key={l.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-100">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center shrink-0">
+                    <FileText className="w-4 h-4 text-gray-500" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">${l.rentAmount.toLocaleString()}/mo</p>
+                    <p className="text-xs text-gray-400">{new Date(l.startDate).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })} — {new Date(l.endDate).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {l.securityDeposit && <span className="text-xs text-gray-400">Dep: ${l.securityDeposit.toLocaleString()}</span>}
+                  <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${LEASE_STATUS_META[l.status]?.color}`}>{LEASE_STATUS_META[l.status]?.label}</span>
+                  <button onClick={() => { setEditLease(l); setFormMode('edit'); setShowForm(true) }} className="text-xs text-gray-400 hover:text-gray-600"><Pencil className="w-3 h-3" /></button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {showForm && (
+        <LeaseFormModal
+          tenant={tenant}
+          mode={formMode}
+          initial={formMode === 'renew' && activeLease ? {
+            startDate: activeLease.endDate,
+            endDate: (() => { const d = new Date(activeLease.endDate); d.setFullYear(d.getFullYear() + 1); return d.toISOString().split('T')[0] })(),
+            rentAmount: nextRent ?? activeLease.rentAmount,
+            securityDeposit: activeLease.securityDeposit,
+            petDeposit: activeLease.petDeposit,
+            escalationPct: activeLease.escalationPct,
+            renewalOption: activeLease.renewalOption,
+            status: 'draft',
+          } : editLease ?? undefined}
+          onClose={() => { setShowForm(false); setEditLease(null) }}
+          onSaved={async (saved) => {
+            showToast({ type: 'success', title: formMode === 'renew' ? 'Renewal created' : formMode === 'edit' ? 'Lease updated' : 'Lease added' })
+            await fetchLeases()
+            setShowForm(false)
+            setEditLease(null)
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+// ─── CRM: Add Emergency Contact Modal ────────────────────────────────────────
+
+function AddEmergencyContactModal({ tenant, onClose, onSaved }: { tenant: Tenant; onClose: () => void; onSaved: (c: EmergencyContact) => void }) {
+  const { primaryColor } = useBranding()
+  const [saving, setSaving] = useState(false)
+  const [form, setForm] = useState({ name: '', phone: '', relationship: '' })
+  const isUuid = (v: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v)
+
+  async function handleSave() {
+    if (!form.name.trim()) return
+    setSaving(true)
+    const { data: { user } } = await supabase.auth.getUser()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error } = await (supabase.from('emergency_contacts') as any).insert({
+      pm_id: user?.id,
+      tenant_id: isUuid(tenant.id) ? tenant.id : null,
+      name: form.name.trim(),
+      phone: form.phone.trim() || null,
+      relationship: form.relationship.trim() || null,
+    }).select().single()
+    if (error) {
+      if (isTableMissing(error)) showToast({ type: 'error', title: 'Run EMERGENCY_CONTACTS_SQL first' })
+      else showToast({ type: 'error', title: 'Failed to save', message: error.message })
+      setSaving(false); return
+    }
+    onSaved({ id: data.id, tenantId: data.tenant_id, name: data.name, phone: data.phone ?? '', relationship: data.relationship ?? '' })
+    setSaving(false)
+  }
+
+  return (
+    <ModalBackdrop onClose={onClose}>
+      <div className="bg-white rounded-xl border border-gray-200 shadow-lg w-full max-w-sm animate-scale-in">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <h2 className="text-base font-bold text-gray-900">Add Emergency Contact</h2>
+          <button onClick={onClose} className="w-8 h-8 rounded-lg bg-gray-100 hover:bg-gray-200 flex items-center justify-center"><X className="w-4 h-4" /></button>
+        </div>
+        <div className="p-6 space-y-3">
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Full Name *</label>
+            <input autoFocus value={form.name} onChange={e => setForm(f => ({...f, name: e.target.value}))} placeholder="e.g. Jane Doe"
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">Phone</label>
+              <input value={form.phone} onChange={e => setForm(f => ({...f, phone: e.target.value}))} placeholder="(555) 000-0000"
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">Relationship</label>
+              <input value={form.relationship} onChange={e => setForm(f => ({...f, relationship: e.target.value}))} placeholder="e.g. Spouse, Parent"
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+          </div>
+          <div className="flex gap-3 pt-2">
+            <button onClick={handleSave} disabled={saving || !form.name.trim()} className="flex-1 text-white py-2.5 rounded-xl text-sm font-bold hover:opacity-90 disabled:opacity-50" style={{ background: primaryColor }}>
+              {saving ? 'Saving…' : 'Add Contact'}
+            </button>
+            <button onClick={onClose} className="px-4 py-2.5 rounded-xl text-sm font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200">Cancel</button>
+          </div>
+        </div>
+      </div>
+    </ModalBackdrop>
+  )
+}
+
+// ─── CRM: Log Contact Modal ───────────────────────────────────────────────────
+
+function LogContactModal({ tenant, onClose, onSaved }: { tenant: Tenant; onClose: () => void; onSaved: () => void }) {
+  const { primaryColor } = useBranding()
+  const [saving, setSaving] = useState(false)
+  const [form, setForm] = useState({ type: 'call', text: '', date: new Date().toISOString().split('T')[0] })
+  const isUuid = (v: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v)
+  const typeMeta = COMM_LOG_TYPES.find(t => t.value === form.type)
+  const IconComp = typeMeta?.icon ?? PhoneCall
+
+  async function handleSave() {
+    if (!form.text.trim()) return
+    setSaving(true)
+    const { data: { user } } = await supabase.auth.getUser()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error } = await (supabase.from('activity_log') as any).insert({
+      admin_id: user?.id,
+      tenant_id: isUuid(tenant.id) ? tenant.id : null,
+      type: form.type,
+      text: form.text.trim(),
+    })
+    if (error) {
+      if (isTableMissing(error) || error.code === '42703') showToast({ type: 'error', title: 'Run TENANT_SCHEMA_SQL first' })
+      else showToast({ type: 'error', title: 'Failed to save', message: error.message })
+      setSaving(false); return
+    }
+    showToast({ type: 'success', title: `${typeMeta?.label ?? 'Entry'} logged` })
+    onSaved()
+    setSaving(false)
+  }
+
+  return (
+    <ModalBackdrop onClose={onClose}>
+      <div className="bg-white rounded-xl border border-gray-200 shadow-lg w-full max-w-md animate-scale-in">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <h2 className="text-base font-bold text-gray-900">Log Contact with {tenant.name}</h2>
+          <button onClick={onClose} className="w-8 h-8 rounded-lg bg-gray-100 hover:bg-gray-200 flex items-center justify-center"><X className="w-4 h-4" /></button>
+        </div>
+        <div className="p-6 space-y-4">
+          {/* Type pills */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-2">Type</label>
+            <div className="flex flex-wrap gap-2">
+              {COMM_LOG_TYPES.filter(t => t.value !== 'note').map(t => {
+                const Ic = t.icon
+                return (
+                  <button key={t.value} onClick={() => setForm(f => ({...f, type: t.value}))}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border-2 transition-all ${form.type === t.value ? `${t.color} border-current` : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
+                    <Ic className="w-3.5 h-3.5" />{t.label}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+          {/* Summary */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Summary *</label>
+            <textarea autoFocus value={form.text} onChange={e => setForm(f => ({...f, text: e.target.value}))} rows={3}
+              placeholder={form.type === 'call' ? 'e.g. Called about noise complaint, resolved amicably' : form.type === 'email' ? 'e.g. Sent lease renewal notice via email' : 'Describe the interaction…'}
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
+          </div>
+          <div className="flex gap-3">
+            <button onClick={handleSave} disabled={saving || !form.text.trim()} className="flex-1 text-white py-2.5 rounded-xl text-sm font-bold hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2" style={{ background: primaryColor }}>
+              <IconComp className="w-4 h-4" />{saving ? 'Saving…' : `Log ${typeMeta?.label ?? 'Entry'}`}
+            </button>
+            <button onClick={onClose} className="px-4 py-2.5 rounded-xl text-sm font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200">Cancel</button>
+          </div>
+        </div>
+      </div>
+    </ModalBackdrop>
+  )
+}
+
+// ─── Tenant Profile Modal ─────────────────────────────────────────────────────
+
 function TenantProfileModal({ tenant, tickets, onClose, onMessage, onSavePayment }: { tenant: Tenant; tickets: MaintenanceTicket[]; onClose: () => void; onMessage: (id: string) => void; onSavePayment?: (record: RentRecord) => void }) {
-  const [tab, setTab] = useState<'overview'|'payments'|'maintenance'|'documents'>('overview')
+  const { primaryColor } = useBranding()
+  const [tab, setTab] = useState<'overview'|'lease'|'payments'|'maintenance'|'log'|'documents'>('overview')
   const [showLogPayment, setShowLogPayment] = useState(false)
+  const [showLateFeeModal, setShowLateFeeModal] = useState(false)
+  const [showAddContact, setShowAddContact] = useState(false)
+  const [showLogContact, setShowLogContact] = useState(false)
+
+  // Emergency contacts
+  const [contacts, setContacts] = useState<EmergencyContact[]>([])
+  const [contactsLoading, setContactsLoading] = useState(false)
+
+  // Communication log
+  const [commLog, setCommLog] = useState<CommLogEntry[]>([])
+  const [commLoading, setCommLoading] = useState(false)
+
+  // Move-in checklist (from tenant row, fallback to template)
+  const [checklist, setChecklist] = useState<ChecklistItem[]>(
+    tenant.moveInChecklist?.length ? tenant.moveInChecklist : MOVE_IN_CHECKLIST_TEMPLATE.map(i => ({ ...i }))
+  )
+
+  // Quick note
+  const [noteText, setNoteText] = useState('')
+  const [savingNote, setSavingNote] = useState(false)
+
   const { data: rentRecords, loading: paymentsLoading, refetch: refetchPayments } = useRentRecords(tenant.id)
   const { data: docs, loading: docsLoading } = useDocuments(tenant.id)
   const tenantTickets = tickets.filter(t => t.tenantId === tenant.id)
+
+  const isUuid = (v: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v)
+  const tenantIdIsUuid = isUuid(tenant.id)
+
+  async function fetchContacts() {
+    if (!tenantIdIsUuid) return
+    setContactsLoading(true)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data } = await (supabase.from('emergency_contacts') as any).select('*').eq('tenant_id', tenant.id).order('created_at')
+    setContacts((data ?? []).map((r: Record<string, unknown>) => ({ id: r.id as string, tenantId: r.tenant_id as string, name: r.name as string, phone: (r.phone as string) ?? '', relationship: (r.relationship as string) ?? '' })))
+    setContactsLoading(false)
+  }
+
+  async function fetchCommLog() {
+    if (!tenantIdIsUuid) return
+    setCommLoading(true)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data } = await (supabase.from('activity_log') as any).select('*').eq('tenant_id', tenant.id).order('created_at', { ascending: false }).limit(50)
+    setCommLog((data ?? []).map((r: Record<string, unknown>) => ({ id: r.id as string, tenantId: r.tenant_id as string | null, adminId: r.admin_id as string | null, type: r.type as string, text: r.text as string, createdAt: r.created_at as string })))
+    setCommLoading(false)
+  }
+
+  useEffect(() => { fetchContacts() }, [tenant.id]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (tab === 'log') fetchCommLog() }, [tab]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function toggleChecklist(key: string) {
+    const updated = checklist.map(i => i.key === key ? { ...i, checked: !i.checked } : i)
+    setChecklist(updated)
+    if (!tenantIdIsUuid) return
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase.from('tenants') as any).update({ move_in_checklist: updated }).eq('id', tenant.id)
+  }
+
+  async function saveNote() {
+    if (!noteText.trim()) return
+    setSavingNote(true)
+    const { data: { user } } = await supabase.auth.getUser()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase.from('activity_log') as any).insert({ admin_id: user?.id, tenant_id: tenantIdIsUuid ? tenant.id : null, type: 'note', text: noteText.trim() })
+    setNoteText('')
+    await fetchCommLog()
+    setSavingNote(false)
+  }
+
+  async function deleteContact(id: string) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase.from('emergency_contacts') as any).delete().eq('id', id)
+    setContacts(prev => prev.filter(c => c.id !== id))
+  }
 
   const now = new Date()
   let leaseEndDate: Date | null = null
@@ -5003,6 +6820,9 @@ function TenantProfileModal({ tenant, tickets, onClose, onMessage, onSavePayment
   const daysRemaining = leaseEndDate ? Math.round((leaseEndDate.getTime() - now.getTime()) / 86400000) : null
   const totalLeaseDays = 365
   const leaseProgress = daysRemaining !== null ? Math.max(0, Math.min(100, Math.round(((totalLeaseDays - daysRemaining) / totalLeaseDays) * 100))) : 0
+
+  const checklistDone = checklist.filter(i => i.checked).length
+  const checklistTotal = checklist.length
 
   return (
     <ModalBackdrop onClose={onClose}>
@@ -5024,18 +6844,22 @@ function TenantProfileModal({ tenant, tickets, onClose, onMessage, onSavePayment
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 px-6 pt-4 border-b border-gray-100">
-          {(['overview','payments','maintenance','documents'] as const).map(t => (
+        <div className="flex gap-0.5 px-4 pt-3 border-b border-gray-100 overflow-x-auto">
+          {(['overview','lease','payments','maintenance','log','documents'] as const).map(t => (
             <button key={t} onClick={() => setTab(t)}
-              className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${tab === t ? 'bg-blue-50 text-blue-700 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}>
-              {t.charAt(0).toUpperCase()+t.slice(1)}
+              className={`px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors border-b-2 ${tab === t ? 'border-b-2 text-blue-700 bg-blue-50 rounded-t-lg' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+              style={tab === t ? { borderColor: primaryColor, color: primaryColor } : {}}>
+              {t === 'log' ? 'Log' : t.charAt(0).toUpperCase()+t.slice(1)}
+              {t === 'log' && commLog.length > 0 && <span className="ml-1 text-xs bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded-full">{commLog.length}</span>}
             </button>
           ))}
         </div>
 
         <div className="p-6">
+          {/* ── OVERVIEW ── */}
           {tab === 'overview' && (
             <div className="space-y-4">
+              {/* Lease summary */}
               <div className="bg-gray-50 rounded-xl p-4">
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Lease</p>
                 <div className="grid grid-cols-3 gap-4 mb-3">
@@ -5055,6 +6879,8 @@ function TenantProfileModal({ tenant, tickets, onClose, onMessage, onSavePayment
                   </div>
                 )}
               </div>
+
+              {/* Contact + Emergency contacts */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="bg-gray-50 rounded-xl p-4">
                   <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Contact</p>
@@ -5062,15 +6888,66 @@ function TenantProfileModal({ tenant, tickets, onClose, onMessage, onSavePayment
                   <p className="text-sm text-gray-700">{tenant.phone}</p>
                 </div>
                 <div className="bg-gray-50 rounded-xl p-4">
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Emergency Contact</p>
-                  <p className="text-sm text-gray-400 italic">Not on file</p>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Emergency Contacts</p>
+                    <button onClick={() => setShowAddContact(true)} className="w-6 h-6 rounded-lg bg-white border border-gray-200 flex items-center justify-center hover:bg-gray-100" title="Add contact">
+                      <UserPlus className="w-3.5 h-3.5 text-gray-500" />
+                    </button>
+                  </div>
+                  {contactsLoading ? <p className="text-xs text-gray-400">Loading…</p> :
+                    contacts.length === 0 ? <p className="text-sm text-gray-400 italic">None on file</p> :
+                    <div className="space-y-2">
+                      {contacts.map(c => (
+                        <div key={c.id} className="flex items-start justify-between gap-2">
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">{c.name}</p>
+                            <p className="text-xs text-gray-500">{c.relationship}{c.phone ? ` · ${c.phone}` : ''}</p>
+                          </div>
+                          <button onClick={() => deleteContact(c.id)} className="text-gray-300 hover:text-red-400 shrink-0 mt-0.5"><X className="w-3.5 h-3.5" /></button>
+                        </div>
+                      ))}
+                    </div>
+                  }
                 </div>
+              </div>
+
+              {/* Move-in Checklist */}
+              <div className="border border-gray-200 rounded-xl overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border-b border-gray-100">
+                  <div className="flex items-center gap-2">
+                    <ClipboardCheck className="w-4 h-4 text-gray-400" />
+                    <p className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Move-In Checklist</p>
+                  </div>
+                  <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${checklistDone === checklistTotal ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
+                    {checklistDone}/{checklistTotal}
+                  </span>
+                </div>
+                <div className="p-3 space-y-1">
+                  {checklist.map(item => (
+                    <label key={item.key} className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 cursor-pointer">
+                      <input type="checkbox" checked={item.checked} onChange={() => toggleChecklist(item.key)}
+                        className="w-4 h-4 rounded border-gray-300 accent-blue-600" />
+                      <span className={`text-sm ${item.checked ? 'line-through text-gray-400' : 'text-gray-700'}`}>{item.label}</span>
+                    </label>
+                  ))}
+                </div>
+                {checklistDone < checklistTotal && !tenantIdIsUuid && (
+                  <p className="px-4 pb-3 text-xs text-amber-600">Run TENANT_SCHEMA_SQL first to persist checklist changes</p>
+                )}
               </div>
             </div>
           )}
+
+          {/* ── LEASE ── */}
+          {tab === 'lease' && <LeasePanel tenant={tenant} />}
+
+          {/* ── PAYMENTS ── */}
           {tab === 'payments' && (
             <div className="space-y-4">
-              <div className="flex justify-end">
+              <div className="flex justify-end gap-2">
+                <button onClick={() => setShowLateFeeModal(true)} className="border border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100 text-sm font-semibold px-4 py-2 rounded-xl flex items-center gap-2 transition-colors">
+                  <AlertCircle className="w-4 h-4" /> Add Late Fee
+                </button>
                 <button onClick={() => setShowLogPayment(true)} className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2 rounded-xl flex items-center gap-2 transition-colors">
                   <CreditCard className="w-4 h-4" /> Log Payment
                 </button>
@@ -5106,6 +6983,8 @@ function TenantProfileModal({ tenant, tickets, onClose, onMessage, onSavePayment
               )}
             </div>
           )}
+
+          {/* ── MAINTENANCE ── */}
           {tab === 'maintenance' && (
             <div>
               {tenantTickets.length === 0 ? (
@@ -5137,6 +7016,61 @@ function TenantProfileModal({ tenant, tickets, onClose, onMessage, onSavePayment
               )}
             </div>
           )}
+
+          {/* ── LOG ── */}
+          {tab === 'log' && (
+            <div className="space-y-4">
+              {/* Quick note entry */}
+              <div className="bg-gray-50 rounded-xl p-4">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1.5"><StickyNote className="w-3.5 h-3.5" />Quick Note</p>
+                <textarea value={noteText} onChange={e => setNoteText(e.target.value)} placeholder="Log a note about this tenant…" rows={2}
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none bg-white" />
+                <div className="flex items-center justify-between mt-2">
+                  <button onClick={() => setShowLogContact(true)} className="text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1.5 border border-gray-200 px-3 py-1.5 rounded-lg hover:bg-white">
+                    <PhoneCall className="w-3.5 h-3.5" /> Log call / email
+                  </button>
+                  <button onClick={saveNote} disabled={savingNote || !noteText.trim()} className="text-xs font-bold text-white px-4 py-1.5 rounded-lg disabled:opacity-40 hover:opacity-90" style={{ background: primaryColor }}>
+                    {savingNote ? 'Saving…' : 'Save Note'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Timeline */}
+              {commLoading ? <p className="text-sm text-gray-400 text-center py-8">Loading…</p> :
+                commLog.length === 0 ? (
+                  <div className="text-center py-10">
+                    <StickyNote className="w-8 h-8 text-gray-200 mx-auto mb-2" />
+                    <p className="text-sm text-gray-400">No log entries yet</p>
+                    <p className="text-xs text-gray-300 mt-1">Notes, calls, emails, and in-person meetings will appear here</p>
+                    {!tenantIdIsUuid && <p className="text-xs text-amber-600 mt-2">Run TENANT_SCHEMA_SQL to enable logging</p>}
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {commLog.map(entry => {
+                      const typeMeta = COMM_LOG_TYPES.find(t => t.value === entry.type)
+                      const IconComp = typeMeta?.icon ?? StickyNote
+                      return (
+                        <div key={entry.id} className="flex gap-3 p-3 rounded-xl border border-gray-100 hover:bg-gray-50">
+                          <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${typeMeta?.color ?? 'bg-gray-100 text-gray-600'}`}>
+                            <IconComp className="w-3.5 h-3.5" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-2 mb-0.5">
+                              <span className={`text-xs font-semibold px-1.5 py-0.5 rounded-full ${typeMeta?.color ?? 'bg-gray-100 text-gray-600'}`}>{typeMeta?.label ?? entry.type}</span>
+                              <span className="text-xs text-gray-400 shrink-0">{new Date(entry.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                            </div>
+                            <p className="text-sm text-gray-700 whitespace-pre-wrap">{entry.text}</p>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )
+              }
+            </div>
+          )}
+
+          {/* ── DOCUMENTS ── */}
           {tab === 'documents' && (
             <div className="space-y-3">
               {docsLoading ? (
@@ -5170,22 +7104,37 @@ function TenantProfileModal({ tenant, tickets, onClose, onMessage, onSavePayment
         <div className="px-6 pb-6">
           <button
             onClick={() => onMessage(tenant.id)}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors flex items-center justify-center gap-2"
+            className="w-full text-white font-semibold py-2.5 rounded-xl text-sm transition-colors flex items-center justify-center gap-2 hover:opacity-90"
+            style={{ background: primaryColor }}
           >
             <MessageSquare className="w-4 h-4" /> Send Message
           </button>
         </div>
       </div>
 
+      {/* Sub-modals */}
       {showLogPayment && (
         <LogPaymentModal
           tenant={tenant}
           onClose={() => setShowLogPayment(false)}
-          onSave={(record) => {
-            onSavePayment?.(record)
-            refetchPayments()
-            setShowLogPayment(false)
-          }}
+          onSave={(record) => { onSavePayment?.(record); refetchPayments(); setShowLogPayment(false) }}
+        />
+      )}
+      {showLateFeeModal && (
+        <LateFeeModal tenant={tenant} onClose={() => setShowLateFeeModal(false)} onSaved={() => setShowLateFeeModal(false)} />
+      )}
+      {showAddContact && (
+        <AddEmergencyContactModal
+          tenant={tenant}
+          onClose={() => setShowAddContact(false)}
+          onSaved={c => { setContacts(prev => [...prev, c]); setShowAddContact(false) }}
+        />
+      )}
+      {showLogContact && (
+        <LogContactModal
+          tenant={tenant}
+          onClose={() => setShowLogContact(false)}
+          onSaved={async () => { setShowLogContact(false); await fetchCommLog() }}
         />
       )}
     </ModalBackdrop>
@@ -5460,6 +7409,738 @@ function NewThreadModal({ tenants, threads, onClose, onSelect, onCreateThread }:
         </div>
       </div>
     </ModalBackdrop>
+  )
+}
+
+// ─── Ledger: Expense Entry Modal ─────────────────────────────────────────────
+
+function ExpenseEntryModal({
+  properties, onClose, onSaved,
+}: {
+  properties: Property[]
+  onClose: () => void
+  onSaved: (entry: LedgerEntry) => void
+}) {
+  const { primaryColor } = useBranding()
+  const [saving, setSaving] = useState(false)
+  const todayStr = new Date().toISOString().split('T')[0]
+  const [form, setForm] = useState({
+    propertyId: properties[0]?.id ?? '',
+    category: 'repair',
+    amount: '',
+    date: todayStr,
+    description: '',
+    recurring: false,
+  })
+  const [errors, setErrors] = useState<Record<string, string>>({})
+  function set<K extends keyof typeof form>(k: K, v: typeof form[K]) { setForm(f => ({ ...f, [k]: v })) }
+
+  async function handleSave() {
+    const e: Record<string, string> = {}
+    if (!form.propertyId) e.propertyId = 'Required'
+    if (!form.amount || isNaN(Number(form.amount)) || Number(form.amount) <= 0) e.amount = 'Enter a valid amount'
+    if (!form.date) e.date = 'Required'
+    if (Object.keys(e).length) { setErrors(e); return }
+    setSaving(true)
+    const { data: { user: freshUser } } = await supabase.auth.getUser()
+    const catMeta = EXPENSE_CATEGORIES.find(c => c.value === form.category)
+    const desc = form.description.trim() || catMeta?.label || form.category
+    const isUuid = (v: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v)
+    const { data, error } = await supabase.from('ledger_entries').insert({
+      pm_id: freshUser?.id,
+      property_id: isUuid(form.propertyId) ? form.propertyId : null,
+      type: 'expense',
+      amount: -Math.abs(Number(form.amount)),
+      date: form.date,
+      description: `[${form.category}] ${desc}`,
+    }).select().single()
+    if (error) { showToast({ type: 'error', title: 'Failed to save', message: error.message }); setSaving(false); return }
+    showToast({ type: 'success', title: 'Expense recorded' })
+    onSaved(ledgerEntryFromRow(data as Record<string, unknown>))
+    setSaving(false)
+  }
+
+  const catMeta = EXPENSE_CATEGORIES.find(c => c.value === form.category)
+
+  return (
+    <ModalBackdrop onClose={onClose}>
+      <div className="bg-white rounded-xl border border-gray-200 shadow-lg w-full max-w-md animate-scale-in">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <div>
+            <h2 className="text-base font-bold text-gray-900">Record Expense</h2>
+            <p className="text-xs text-gray-400">Logged as a negative ledger entry</p>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 rounded-lg bg-gray-100 hover:bg-gray-200 flex items-center justify-center"><X className="w-4 h-4" /></button>
+        </div>
+        <div className="p-6 space-y-4">
+          {/* Property */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Property *</label>
+            <select value={form.propertyId} onChange={e => set('propertyId', e.target.value)} className={`w-full px-3 py-2 text-sm border rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.propertyId ? 'border-red-400' : 'border-gray-200'}`}>
+              <option value="">Select property…</option>
+              {properties.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+            {errors.propertyId && <p className="text-xs text-red-500 mt-0.5">{errors.propertyId}</p>}
+          </div>
+          {/* Category pills */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-2">Category</label>
+            <div className="flex flex-wrap gap-1.5">
+              {EXPENSE_CATEGORIES.map(c => (
+                <button key={c.value} onClick={() => set('category', c.value)}
+                  className={`px-3 py-1 rounded-full text-xs font-semibold border-2 transition-all ${form.category === c.value ? `${c.color} border-current` : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}
+                >{c.label}</button>
+              ))}
+            </div>
+          </div>
+          {/* Amount + Date */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">Amount *</label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+                <input type="number" min="0" step="0.01" value={form.amount} onChange={e => set('amount', e.target.value)} placeholder="0.00" className={`w-full pl-7 pr-3 py-2 text-sm border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.amount ? 'border-red-400' : 'border-gray-200'}`} />
+              </div>
+              {errors.amount && <p className="text-xs text-red-500 mt-0.5">{errors.amount}</p>}
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">Date *</label>
+              <input type="date" value={form.date} onChange={e => set('date', e.target.value)} className={`w-full px-3 py-2 text-sm border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.date ? 'border-red-400' : 'border-gray-200'}`} />
+            </div>
+          </div>
+          {/* Description */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Description <span className="font-normal text-gray-400">(optional)</span></label>
+            <input value={form.description} onChange={e => set('description', e.target.value)} placeholder={catMeta?.label ?? 'Details about this expense…'} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+        </div>
+        <div className="px-6 pb-6 flex gap-3">
+          <button onClick={handleSave} disabled={saving} className="flex-1 text-white py-2.5 rounded-xl text-sm font-bold hover:opacity-90 disabled:opacity-50 transition-opacity" style={{ background: primaryColor }}>
+            {saving ? 'Saving…' : 'Record Expense'}
+          </button>
+          <button onClick={onClose} className="px-4 py-2.5 rounded-xl text-sm font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200">Cancel</button>
+        </div>
+      </div>
+    </ModalBackdrop>
+  )
+}
+
+// ─── Ledger: Late Fee Modal ───────────────────────────────────────────────────
+
+function LateFeeModal({ tenant, onClose, onSaved }: { tenant: Tenant; onClose: () => void; onSaved: (entry: LedgerEntry) => void }) {
+  const { primaryColor } = useBranding()
+  const [saving, setSaving] = useState(false)
+  const todayStr = new Date().toISOString().split('T')[0]
+  const [form, setForm] = useState({ amount: '', date: todayStr, description: 'Late fee' })
+  const isUuid = (v: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v)
+
+  async function handleSave() {
+    if (!form.amount || Number(form.amount) <= 0) return
+    setSaving(true)
+    const { data: { user: freshUser } } = await supabase.auth.getUser()
+    const { data, error } = await supabase.from('ledger_entries').insert({
+      pm_id: freshUser?.id,
+      tenant_id: isUuid(tenant.id) ? tenant.id : null,
+      type: 'late_fee',
+      amount: Math.abs(Number(form.amount)),
+      date: form.date,
+      description: form.description || 'Late fee',
+    }).select().single()
+    if (error) { showToast({ type: 'error', title: 'Failed to save', message: error.message }); setSaving(false); return }
+    showToast({ type: 'success', title: `Late fee of $${Number(form.amount).toLocaleString()} recorded` })
+    onSaved(ledgerEntryFromRow(data as Record<string, unknown>))
+    setSaving(false)
+  }
+
+  return (
+    <ModalBackdrop onClose={onClose}>
+      <div className="bg-white rounded-xl border border-gray-200 shadow-lg w-full max-w-sm animate-scale-in">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <h2 className="text-base font-bold text-gray-900">Add Late Fee</h2>
+          <button onClick={onClose} className="w-8 h-8 rounded-lg bg-gray-100 hover:bg-gray-200 flex items-center justify-center"><X className="w-4 h-4" /></button>
+        </div>
+        <div className="p-6 space-y-4">
+          <p className="text-sm text-gray-600">Adding a late fee for <span className="font-semibold">{tenant.name}</span></p>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Amount *</label>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+              <input type="number" min="0" step="0.01" autoFocus value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} placeholder="e.g. 50" className="w-full pl-7 pr-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">Date</label>
+              <input type="date" value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">Description</label>
+              <input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+          </div>
+        </div>
+        <div className="px-6 pb-6 flex gap-3">
+          <button onClick={handleSave} disabled={saving || !form.amount} className="flex-1 text-white py-2.5 rounded-xl text-sm font-bold hover:opacity-90 disabled:opacity-50" style={{ background: primaryColor }}>
+            {saving ? 'Saving…' : 'Add Late Fee'}
+          </button>
+          <button onClick={onClose} className="px-4 py-2.5 rounded-xl text-sm font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200">Cancel</button>
+        </div>
+      </div>
+    </ModalBackdrop>
+  )
+}
+
+// ─── Ledger Panel ─────────────────────────────────────────────────────────────
+
+function LedgerPanel({ tenants, properties, rentRecords }: { tenants: Tenant[]; properties: Property[]; rentRecords: RentRecord[] }) {
+  const { user } = useAuth()
+  const { primaryColor } = useBranding()
+  const [tab, setTab] = useState<'overview' | 'expenses' | 'aging' | 'late-fees'>('overview')
+  const [entries, setEntries] = useState<LedgerEntry[]>([])
+  const [loading, setLoading] = useState(true)
+  const [tableError, setTableError] = useState(false)
+  const [showExpenseModal, setShowExpenseModal] = useState(false)
+  const [monthFilter, setMonthFilter] = useState<string>(() => {
+    const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+  })
+  const [propFilter, setPropFilter] = useState('all')
+
+  async function fetchEntries() {
+    setLoading(true)
+    const { data, error } = await supabase.from('ledger_entries').select('*').order('date', { ascending: false })
+    if (isTableMissing(error)) { setTableError(true); setLoading(false); return }
+    setEntries((data ?? []).map(r => ledgerEntryFromRow(r as Record<string, unknown>)))
+    setLoading(false)
+  }
+  useEffect(() => { fetchEntries() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Derived: rent income from rent_payments ──────────────────────────────
+  const now = new Date()
+  const rentIncomeByMonth = useMemo(() => {
+    const map: Record<string, number> = {}
+    for (const r of rentRecords) {
+      if (r.status === 'pending') continue
+      const m = r.month  // e.g. "June 2026"
+      map[m] = (map[m] ?? 0) + r.amount
+    }
+    return map
+  }, [rentRecords])
+
+  // ── Filtered entries ─────────────────────────────────────────────────────
+  const filtered = useMemo(() => {
+    return entries.filter(e => {
+      const entryMonth = e.date?.slice(0, 7) // "2026-06"
+      if (monthFilter !== 'all' && entryMonth !== monthFilter) return false
+      if (propFilter !== 'all' && e.propertyId !== propFilter) return false
+      return true
+    })
+  }, [entries, monthFilter, propFilter])
+
+  // ── Overview stats ───────────────────────────────────────────────────────
+  const overviewStats = useMemo(() => {
+    const months: string[] = []
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+      months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
+    }
+    return months.map(m => {
+      const label = new Date(m + '-01').toLocaleString('en-US', { month: 'short', year: '2-digit' })
+      const rentMonthLabel = new Date(m + '-01').toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+      const income = (rentIncomeByMonth[rentMonthLabel] ?? 0) +
+        entries.filter(e => e.date?.slice(0, 7) === m && e.amount > 0).reduce((s, e) => s + e.amount, 0)
+      const expense = Math.abs(entries.filter(e => e.date?.slice(0, 7) === m && e.amount < 0).reduce((s, e) => s + e.amount, 0))
+      return { month: m, label, income, expense, noi: income - expense }
+    })
+  }, [entries, rentIncomeByMonth]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  const currentStats = overviewStats.find(s => s.month === currentMonthKey) ?? { income: 0, expense: 0, noi: 0 }
+  const ytdIncome = overviewStats.reduce((s, d) => s + d.income, 0)
+  const ytdExpenses = overviewStats.reduce((s, d) => s + d.expense, 0)
+  const ytdNOI = ytdIncome - ytdExpenses
+
+  // ── Expenses by category ─────────────────────────────────────────────────
+  const expensesByCategory = useMemo(() => {
+    const map: Record<string, number> = {}
+    for (const e of entries.filter(e => e.amount < 0)) {
+      const cat = e.description?.match(/^\[([^\]]+)\]/)?.[1] ?? 'other'
+      map[cat] = (map[cat] ?? 0) + Math.abs(e.amount)
+    }
+    return Object.entries(map).sort((a, b) => b[1] - a[1])
+  }, [entries])
+
+  // ── NOI per property ─────────────────────────────────────────────────────
+  const noiByProperty = useMemo(() => {
+    return properties.map(p => {
+      const propRentLabel = rentRecords
+        .filter(r => r.status !== 'pending' && tenants.find(t => t.id === r.tenantId)?.property === p.name)
+        .reduce((s, r) => s + r.amount, 0)
+      const propExpenses = Math.abs(entries.filter(e => e.propertyId === p.id && e.amount < 0).reduce((s, e) => s + e.amount, 0))
+      const propLateFees = entries.filter(e => e.propertyId === p.id && e.type === 'late_fee').reduce((s, e) => s + e.amount, 0)
+      const income = propRentLabel + propLateFees
+      return { property: p, income, expenses: propExpenses, noi: income - propExpenses }
+    })
+  }, [entries, properties, rentRecords, tenants])
+
+  // ── Rent aging ───────────────────────────────────────────────────────────
+  const agingData = useMemo(() => {
+    const thisMonth = now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+    const paidThisMonth = new Set(rentRecords.filter(r => r.month === thisMonth && r.status !== 'pending').map(r => r.tenantId))
+    const today = now.getDate()
+    return tenants
+      .filter(t => t.status !== 'past' && t.status !== 'invited' && !paidThisMonth.has(t.id))
+      .map(t => {
+        const dueDay = t.rentDueDay ?? 1
+        const daysLate = Math.max(0, today - dueDay)
+        return { tenant: t, daysLate }
+      })
+      .filter(x => x.daysLate > 0)
+      .sort((a, b) => b.daysLate - a.daysLate)
+  }, [tenants, rentRecords]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const aging30 = agingData.filter(x => x.daysLate <= 30)
+  const aging60 = agingData.filter(x => x.daysLate > 30 && x.daysLate <= 60)
+  const aging90 = agingData.filter(x => x.daysLate > 60)
+
+  // ── Late fees ────────────────────────────────────────────────────────────
+  const lateFeeEntries = useMemo(() => entries.filter(e => e.type === 'late_fee').sort((a, b) => b.date.localeCompare(a.date)), [entries])
+  const totalLateFees = lateFeeEntries.reduce((s, e) => s + e.amount, 0)
+
+  const monthOptions = useMemo(() => {
+    const opts = [{ value: 'all', label: 'All time' }]
+    for (let i = 0; i < 12; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+      const val = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+      opts.push({ value: val, label: d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) })
+    }
+    return opts
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (loading) return (
+    <div className="p-6 space-y-3">{[0,1,2,3].map(i => <div key={i} className="h-16 bg-gray-100 animate-pulse rounded-xl" />)}</div>
+  )
+
+  if (tableError) return (
+    <div className="p-6">
+      <div className="bg-amber-50 border border-amber-200 rounded-xl p-5">
+        <p className="text-sm font-bold text-amber-900 mb-1">Ledger table not set up</p>
+        <p className="text-xs text-amber-700 mb-3">Run each statement separately in Supabase Dashboard → SQL Editor:</p>
+        <pre className="bg-white border border-amber-200 rounded-lg p-3 text-xs text-gray-800 overflow-x-auto whitespace-pre-wrap">{LEDGER_CREATE_SQL}</pre>
+      </div>
+    </div>
+  )
+
+  return (
+    <div className="p-6 space-y-5 animate-slide-up">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-lg font-bold text-gray-900">Ledger</h1>
+          <p className="text-xs text-gray-500">Income, expenses & NOI across your portfolio</p>
+        </div>
+        <button onClick={() => setShowExpenseModal(true)} className="flex items-center gap-2 text-sm font-semibold text-white px-4 py-2 rounded-xl hover:opacity-90 transition-opacity" style={{ background: primaryColor }}>
+          <TrendingDown className="w-4 h-4" /> Record Expense
+        </button>
+      </div>
+
+      {/* KPI strip */}
+      <div className="grid grid-cols-4 gap-4">
+        {[
+          { label: 'YTD Income',    value: `$${ytdIncome.toLocaleString()}`,    icon: <ArrowUpRight className="w-5 h-5" />,  color: 'text-green-600 bg-green-50',  sub: '6-month total' },
+          { label: 'YTD Expenses',  value: `$${ytdExpenses.toLocaleString()}`,  icon: <ArrowDownLeft className="w-5 h-5" />, color: 'text-red-600 bg-red-50',      sub: '6-month total' },
+          { label: 'YTD NOI',       value: `$${ytdNOI.toLocaleString()}`,       icon: <Landmark className="w-5 h-5" />,     color: ytdNOI >= 0 ? 'text-emerald-600 bg-emerald-50' : 'text-red-600 bg-red-50', sub: `${ytdIncome > 0 ? Math.round((ytdNOI / ytdIncome) * 100) : 0}% margin` },
+          { label: 'Late Fees (all)', value: `$${totalLateFees.toLocaleString()}`, icon: <PiggyBank className="w-5 h-5" />, color: 'text-orange-600 bg-orange-50', sub: `${lateFeeEntries.length} entries` },
+        ].map(k => (
+          <div key={k.label} className="bg-white rounded-xl border border-gray-200 p-4">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{k.label}</p>
+              <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${k.color}`}>{k.icon}</div>
+            </div>
+            <p className="text-2xl font-bold text-gray-900">{k.value}</p>
+            <p className="text-xs text-gray-400 mt-0.5">{k.sub}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-1 border-b border-gray-200">
+        {(['overview', 'expenses', 'aging', 'late-fees'] as const).map(t => (
+          <button key={t} onClick={() => setTab(t)}
+            className={`px-4 py-2.5 text-sm font-semibold border-b-2 transition-colors capitalize ${tab === t ? 'border-b-2 text-white' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+            style={tab === t ? { borderColor: primaryColor, color: primaryColor } : {}}
+          >{t === 'late-fees' ? 'Late Fees' : t.charAt(0).toUpperCase() + t.slice(1)}</button>
+        ))}
+      </div>
+
+      {/* OVERVIEW */}
+      {tab === 'overview' && (
+        <div className="space-y-5">
+          {/* 6-month summary chart */}
+          <div className="bg-white rounded-xl border border-gray-200 p-5">
+            <h3 className="text-sm font-semibold text-gray-900 mb-4">6-Month Income vs. Expenses</h3>
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={overviewStats} margin={{ top: 4, right: 4, left: -16, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" vertical={false} />
+                <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} width={50} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
+                <Tooltip formatter={(v: number, name: string) => [`$${v.toLocaleString()}`, name]} contentStyle={{ borderRadius: 8, border: '1px solid #E5E7EB', fontSize: 12 }} />
+                <Bar dataKey="income" name="Income" fill={primaryColor} radius={[4, 4, 0, 0]} opacity={0.9} />
+                <Bar dataKey="expense" name="Expenses" fill="#EF4444" radius={[4, 4, 0, 0]} opacity={0.7} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* NOI by property */}
+          <div className="bg-white rounded-xl border border-gray-200 p-5">
+            <h3 className="text-sm font-semibold text-gray-900 mb-4">NOI by Property</h3>
+            <div className="space-y-3">
+              {noiByProperty.map(({ property: p, income, expenses, noi }) => {
+                const noiPct = income > 0 ? Math.round((noi / income) * 100) : 0
+                return (
+                  <div key={p.id} className="flex items-center gap-4">
+                    <div className="w-36 shrink-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">{p.name}</p>
+                      <p className="text-xs text-gray-400">{p.city}</p>
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
+                        <span className="text-green-600 font-medium">↑ ${income.toLocaleString()}</span>
+                        <span className="text-red-500">↓ ${expenses.toLocaleString()}</span>
+                        <span className={`font-bold ${noi >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>NOI ${noi.toLocaleString()}</span>
+                      </div>
+                      <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                        <div className={`h-full rounded-full ${noi >= 0 ? 'bg-emerald-500' : 'bg-red-400'}`} style={{ width: `${Math.max(5, Math.min(100, income > 0 ? (noi / income) * 100 : 0))}%` }} />
+                      </div>
+                    </div>
+                    <div className="w-12 text-right shrink-0">
+                      <p className={`text-sm font-bold ${noiPct >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>{noiPct}%</p>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Expense breakdown by category */}
+          {expensesByCategory.length > 0 && (
+            <div className="bg-white rounded-xl border border-gray-200 p-5">
+              <h3 className="text-sm font-semibold text-gray-900 mb-4">Expense Breakdown</h3>
+              <div className="space-y-2.5">
+                {expensesByCategory.map(([cat, total]) => {
+                  const catMeta = EXPENSE_CATEGORIES.find(c => c.value === cat)
+                  const totalExpense = expensesByCategory.reduce((s, [, v]) => s + v, 0)
+                  const pct = totalExpense > 0 ? Math.round((total / totalExpense) * 100) : 0
+                  return (
+                    <div key={cat} className="flex items-center gap-3">
+                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full w-24 text-center shrink-0 ${catMeta?.color ?? 'bg-gray-100 text-gray-600'}`}>{catMeta?.label ?? cat}</span>
+                      <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+                        <div className="h-full bg-red-400 rounded-full" style={{ width: `${pct}%` }} />
+                      </div>
+                      <span className="text-sm font-bold text-gray-700 w-20 text-right">${total.toLocaleString()}</span>
+                      <span className="text-xs text-gray-400 w-8 text-right">{pct}%</span>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* EXPENSES */}
+      {tab === 'expenses' && (
+        <div className="space-y-4">
+          {/* Filters */}
+          <div className="flex gap-3">
+            <select value={monthFilter} onChange={e => setMonthFilter(e.target.value)} className="px-3 py-2 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none">
+              {monthOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+            <select value={propFilter} onChange={e => setPropFilter(e.target.value)} className="px-3 py-2 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none">
+              <option value="all">All properties</option>
+              {properties.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </div>
+
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            {filtered.filter(e => e.amount < 0).length === 0 ? (
+              <div className="text-center py-12">
+                <TrendingDown className="w-8 h-8 text-gray-200 mx-auto mb-2" />
+                <p className="text-sm text-gray-400">No expenses recorded{monthFilter !== 'all' ? ' for this period' : ''}</p>
+                <button onClick={() => setShowExpenseModal(true)} className="mt-3 text-xs font-bold text-white px-4 py-2 rounded-xl" style={{ background: primaryColor }}>
+                  Record First Expense
+                </button>
+              </div>
+            ) : (
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 border-b border-gray-100">
+                  <tr>{['Date','Property','Category','Description','Amount'].map(h => (
+                    <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">{h}</th>
+                  ))}</tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {filtered.filter(e => e.amount < 0).map(e => {
+                    const propName = properties.find(p => p.id === e.propertyId)?.name ?? '—'
+                    const catMatch = e.description?.match(/^\[([^\]]+)\]/)
+                    const cat = catMatch?.[1] ?? 'other'
+                    const desc = e.description?.replace(/^\[[^\]]+\]\s*/, '') || '—'
+                    const catMeta = EXPENSE_CATEGORIES.find(c => c.value === cat)
+                    return (
+                      <tr key={e.id} className="hover:bg-gray-50 transition-colors">
+                        <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{new Date(e.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</td>
+                        <td className="px-4 py-3 text-gray-700">{propName}</td>
+                        <td className="px-4 py-3"><span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${catMeta?.color ?? 'bg-gray-100 text-gray-600'}`}>{catMeta?.label ?? cat}</span></td>
+                        <td className="px-4 py-3 text-gray-600">{desc}</td>
+                        <td className="px-4 py-3 font-semibold text-red-600">−${Math.abs(e.amount).toLocaleString()}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+                <tfoot className="bg-gray-50 border-t border-gray-100">
+                  <tr>
+                    <td colSpan={4} className="px-4 py-3 text-xs font-bold text-gray-500 uppercase">Total</td>
+                    <td className="px-4 py-3 font-bold text-red-600">
+                      −${Math.abs(filtered.filter(e => e.amount < 0).reduce((s, e) => s + e.amount, 0)).toLocaleString()}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* AGING */}
+      {tab === 'aging' && (
+        <div className="space-y-5">
+          {/* Summary chips */}
+          <div className="grid grid-cols-3 gap-4">
+            {[
+              { label: '1–30 Days', count: aging30.length, color: 'border-amber-200 bg-amber-50', text: 'text-amber-700', amount: aging30.reduce((s, x) => s + x.tenant.rent, 0) },
+              { label: '31–60 Days', count: aging60.length, color: 'border-orange-200 bg-orange-50', text: 'text-orange-700', amount: aging60.reduce((s, x) => s + x.tenant.rent, 0) },
+              { label: '60+ Days', count: aging90.length, color: 'border-red-200 bg-red-50', text: 'text-red-700', amount: aging90.reduce((s, x) => s + x.tenant.rent, 0) },
+            ].map(b => (
+              <div key={b.label} className={`rounded-xl border p-4 ${b.color}`}>
+                <p className={`text-2xl font-black ${b.text}`}>{b.count}</p>
+                <p className={`text-xs font-semibold ${b.text}`}>{b.label} Late</p>
+                <p className={`text-xs mt-1 ${b.text} opacity-70`}>${b.amount.toLocaleString()} outstanding</p>
+              </div>
+            ))}
+          </div>
+
+          {agingData.length === 0 ? (
+            <div className="text-center py-12 bg-white rounded-xl border border-gray-200">
+              <CheckCircle className="w-8 h-8 text-green-300 mx-auto mb-2" />
+              <p className="text-sm font-medium text-gray-500">No overdue rent this month</p>
+            </div>
+          ) : (
+            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 border-b border-gray-100">
+                  <tr>{['Tenant','Property','Unit','Monthly Rent','Days Late','Bucket'].map(h => (
+                    <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">{h}</th>
+                  ))}</tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {agingData.map(({ tenant: t, daysLate }) => {
+                    const bucket = daysLate > 60 ? { label: '60+ days', color: 'bg-red-100 text-red-700' } : daysLate > 30 ? { label: '31–60 days', color: 'bg-orange-100 text-orange-700' } : { label: '1–30 days', color: 'bg-amber-100 text-amber-700' }
+                    return (
+                      <tr key={t.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 font-medium text-gray-900">{t.name}</td>
+                        <td className="px-4 py-3 text-gray-600">{t.property}</td>
+                        <td className="px-4 py-3 text-gray-600">{t.unit}</td>
+                        <td className="px-4 py-3 font-semibold">${t.rent.toLocaleString()}</td>
+                        <td className="px-4 py-3 font-bold text-red-600">{daysLate}d</td>
+                        <td className="px-4 py-3"><span className={`text-xs font-bold px-2 py-0.5 rounded-full ${bucket.color}`}>{bucket.label}</span></td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* LATE FEES */}
+      {tab === 'late-fees' && (
+        <div className="space-y-4">
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            {lateFeeEntries.length === 0 ? (
+              <div className="text-center py-12">
+                <Receipt className="w-8 h-8 text-gray-200 mx-auto mb-2" />
+                <p className="text-sm text-gray-400">No late fees recorded yet</p>
+                <p className="text-xs text-gray-400 mt-1">Add late fees from the tenant profile → Payments tab</p>
+              </div>
+            ) : (
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 border-b border-gray-100">
+                  <tr>{['Date','Tenant','Description','Amount'].map(h => (
+                    <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">{h}</th>
+                  ))}</tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {lateFeeEntries.map(e => {
+                    const t = tenants.find(x => x.id === e.tenantId)
+                    return (
+                      <tr key={e.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 text-gray-500">{new Date(e.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</td>
+                        <td className="px-4 py-3 font-medium text-gray-900">{t?.name ?? '—'}</td>
+                        <td className="px-4 py-3 text-gray-600">{e.description}</td>
+                        <td className="px-4 py-3 font-bold text-orange-600">+${e.amount.toLocaleString()}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+                <tfoot className="bg-gray-50 border-t border-gray-100">
+                  <tr>
+                    <td colSpan={3} className="px-4 py-3 text-xs font-bold text-gray-500 uppercase">Total Collected</td>
+                    <td className="px-4 py-3 font-bold text-orange-600">+${totalLateFees.toLocaleString()}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            )}
+          </div>
+        </div>
+      )}
+
+      {showExpenseModal && (
+        <ExpenseEntryModal
+          properties={properties}
+          onClose={() => setShowExpenseModal(false)}
+          onSaved={(entry) => { setEntries(prev => [entry, ...prev]); setShowExpenseModal(false) }}
+        />
+      )}
+    </div>
+  )
+}
+
+// ─── All Units Panel ──────────────────────────────────────────────────────────
+
+function AllUnitsPanel({ properties, tenants, setActivePanel }: { properties: Property[]; tenants: Tenant[]; setActivePanel: (p: string) => void }) {
+  const [search, setSearch] = useState('')
+  const units = properties.flatMap(p =>
+    Array.from({ length: p.units }, (_, i) => {
+      const unitNum = `Unit ${i + 1}`
+      const tenant = tenants.find(t => t.property === p.name && t.unit === unitNum)
+      return { propertyId: p.id, propertyName: p.name, unitNum, tenant }
+    })
+  ).filter(u =>
+    !search ||
+    u.unitNum.toLowerCase().includes(search.toLowerCase()) ||
+    u.propertyName.toLowerCase().includes(search.toLowerCase()) ||
+    (u.tenant?.name ?? '').toLowerCase().includes(search.toLowerCase())
+  )
+  const vacant = units.filter(u => !u.tenant).length
+  return (
+    <div className="p-4 space-y-3">
+      <div className="flex items-center gap-3">
+        <div className="relative flex-1 max-w-xs">
+          <Search className="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search units…"
+            className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-blue-300" />
+        </div>
+        <span className="text-xs text-gray-500">{units.length} units · {vacant} vacant</span>
+      </div>
+      <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-gray-50 border-b border-gray-200">
+            <tr>
+              {['Property', 'Unit', 'Tenant', 'Rent', 'Lease End', 'Status'].map(h => (
+                <th key={h} className="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {units.map((u, i) => (
+              <tr key={i} className="hover:bg-gray-50 cursor-pointer" onClick={() => setActivePanel('properties')}>
+                <td className="px-3 py-2 text-xs font-medium text-gray-700">{u.propertyName}</td>
+                <td className="px-3 py-2 text-xs text-gray-600">{u.unitNum}</td>
+                <td className="px-3 py-2 text-xs text-gray-800">{u.tenant?.name ?? <span className="text-gray-400 italic">Vacant</span>}</td>
+                <td className="px-3 py-2 text-xs text-gray-600">{u.tenant ? `$${u.tenant.rent.toLocaleString()}` : '—'}</td>
+                <td className="px-3 py-2 text-xs text-gray-500">{u.tenant?.leaseEnd ?? '—'}</td>
+                <td className="px-3 py-2">
+                  {u.tenant ? (
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${u.tenant.status === 'active' ? 'bg-green-100 text-green-700' : u.tenant.status === 'notice' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-500'}`}>
+                      {u.tenant.status}
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700">vacant</span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {units.length === 0 && (
+          <div className="px-4 py-8 text-center text-sm text-gray-400">No units match your search</div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── All Leases Panel ─────────────────────────────────────────────────────────
+
+function AllLeasesPanel({ tenants, setActivePanel }: { tenants: Tenant[]; setActivePanel: (p: string) => void }) {
+  const [search, setSearch] = useState('')
+  const now = new Date()
+  const active = tenants
+    .filter(t => t.status !== 'past' && t.status !== 'invited')
+    .filter(t => !search || t.name.toLowerCase().includes(search.toLowerCase()) || t.property.toLowerCase().includes(search.toLowerCase()))
+    .map(t => {
+      const daysLeft = t.leaseEnd ? Math.ceil((new Date(t.leaseEnd).getTime() - now.getTime()) / 86400000) : null
+      return { ...t, daysLeft }
+    })
+    .sort((a, b) => (a.daysLeft ?? 9999) - (b.daysLeft ?? 9999))
+  return (
+    <div className="p-4 space-y-3">
+      <div className="flex items-center gap-3">
+        <div className="relative flex-1 max-w-xs">
+          <Search className="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search leases…"
+            className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-blue-300" />
+        </div>
+        <span className="text-xs text-gray-500">{active.length} active leases</span>
+      </div>
+      <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-gray-50 border-b border-gray-200">
+            <tr>
+              {['Tenant', 'Property', 'Unit', 'Rent/mo', 'Move In', 'Lease End', 'Days Left', 'Status'].map(h => (
+                <th key={h} className="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {active.map(t => (
+              <tr key={t.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => setActivePanel('tenants')}>
+                <td className="px-3 py-2 text-xs font-semibold text-gray-800">{t.name}</td>
+                <td className="px-3 py-2 text-xs text-gray-600">{t.property}</td>
+                <td className="px-3 py-2 text-xs text-gray-600">{t.unit}</td>
+                <td className="px-3 py-2 text-xs text-gray-700">${t.rent.toLocaleString()}</td>
+                <td className="px-3 py-2 text-xs text-gray-500">{t.moveIn || '—'}</td>
+                <td className="px-3 py-2 text-xs text-gray-500">{t.leaseEnd || 'M-t-M'}</td>
+                <td className="px-3 py-2 text-xs">
+                  {t.daysLeft !== null ? (
+                    <span className={`font-bold ${t.daysLeft <= 14 ? 'text-red-600' : t.daysLeft <= 30 ? 'text-orange-600' : t.daysLeft <= 60 ? 'text-amber-600' : 'text-gray-500'}`}>
+                      {t.daysLeft}d
+                    </span>
+                  ) : '—'}
+                </td>
+                <td className="px-3 py-2">
+                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${t.status === 'active' ? 'bg-green-100 text-green-700' : t.status === 'notice' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-500'}`}>
+                    {t.status}
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {active.length === 0 && (
+          <div className="px-4 py-8 text-center text-sm text-gray-400">No leases match your search</div>
+        )}
+      </div>
+    </div>
   )
 }
 
@@ -6163,6 +8844,10 @@ export default function AdminPortal() {
       })
   }, [user])
 
+  // Command palette + global search
+  const [showCommandPalette, setShowCommandPalette] = useState(false)
+  const globalSearchRef = useRef<HTMLInputElement>(null)
+
   // Profile dropdown state
   const [showProfileMenu, setShowProfileMenu] = useState(false)
   const [showShortcutsModal, setShowShortcutsModal] = useState(false)
@@ -6249,6 +8934,35 @@ export default function AdminPortal() {
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
 
+  // Keyboard shortcuts
+  useEffect(() => {
+    let gPressed = false
+    let gTimer: ReturnType<typeof setTimeout>
+    function onKey(e: KeyboardEvent) {
+      const tag = (e.target as HTMLElement).tagName
+      const inInput = tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement).isContentEditable
+      if (e.key === '/' && !inInput) { e.preventDefault(); globalSearchRef.current?.focus(); return }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); setShowCommandPalette(true); return }
+      if (e.key === 'Escape') { setShowCommandPalette(false); globalSearchRef.current?.blur(); return }
+      if (inInput) return
+      if (e.key === 'g') {
+        gPressed = true
+        clearTimeout(gTimer)
+        gTimer = setTimeout(() => { gPressed = false }, 800)
+        return
+      }
+      if (gPressed) {
+        gPressed = false
+        clearTimeout(gTimer)
+        const map: Record<string, string> = { d: 'dashboard', p: 'properties', t: 'tenants', m: 'maintenance', l: 'payments', r: 'reports' }
+        if (map[e.key]) { e.preventDefault(); setActivePanel(map[e.key]) }
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => { window.removeEventListener('keydown', onKey); clearTimeout(gTimer) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // Badge counts
   const unreadMessages = threads.reduce((s, t) => s + t.unread, 0)
   const openTicketCount = tickets.filter((t) => t.status !== 'resolved').length
@@ -6256,9 +8970,12 @@ export default function AdminPortal() {
   const navItems: NavItem[] = [
     { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" /> },
     { id: 'properties', label: 'Properties', icon: <Building2 className="w-5 h-5" /> },
+    { id: 'units', label: 'Units', icon: <Home className="w-5 h-5" /> },
     { id: 'tenants', label: 'Tenants', icon: <Users className="w-5 h-5" /> },
+    { id: 'leases', label: 'Leases', icon: <ClipboardList className="w-5 h-5" /> },
     { id: 'maintenance', label: 'Maintenance', icon: <Wrench className="w-5 h-5" />, badge: openTicketCount },
-    { id: 'analytics', label: 'Analytics', icon: <BarChart2 className="w-5 h-5" /> },
+    { id: 'payments', label: 'Payments', icon: <Landmark className="w-5 h-5" /> },
+    { id: 'reports', label: 'Reports', icon: <BarChart2 className="w-5 h-5" /> },
     { id: 'messages', label: 'Messages', icon: <MessageSquare className="w-5 h-5" />, badge: unreadMessages },
     { id: 'documents', label: 'Documents', icon: <FileText className="w-5 h-5" /> },
   ]
@@ -6269,22 +8986,26 @@ export default function AdminPortal() {
         return (
           <DashboardPanel
             setActivePanel={setActivePanel}
-            setAnalyticsSection={setAnalyticsSection}
             onShowInviteModal={() => setShowInviteModal(true)}
             onShowAddPropertyModal={() => setShowAddPropertyModal(true)}
-            onShowReportModal={() => setShowReportModal(true)}
             onShowAnnouncementModal={() => setShowAnnouncementModal(true)}
-            onShowScheduleModal={() => { setMaintenanceSubTab('inspections'); setActivePanel('maintenance'); setTimeout(() => setMaintenanceSubTab('tickets'), 200) }}
             tickets={tickets}
             tenants={tenants}
             properties={propertiesList}
             rentRecords={rentRecords}
             recentActivity={recentActivity}
-            onConfirmPayment={confirmPayment}
           />
         )
+      case 'ledger':
+      case 'payments':
+        return <LedgerPanel tenants={tenants} properties={propertiesList} rentRecords={rentRecords} />
       case 'analytics':
+      case 'reports':
         return <AnalyticsPanel initialSection={analyticsSection} rentRecords={rentRecords} tenants={tenants} properties={propertiesList} tickets={tickets} activityFeed={recentActivity} onViewTenant={(id) => setViewTenantId(id)} />
+      case 'units':
+        return <AllUnitsPanel properties={propertiesList} tenants={tenants} setActivePanel={setActivePanel} />
+      case 'leases':
+        return <AllLeasesPanel tenants={tenants} setActivePanel={setActivePanel} />
       case 'properties':
         return (
           <PropertiesPanel
@@ -6484,19 +9205,22 @@ export default function AdminPortal() {
       {/* Main content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Top bar */}
-        <div className="bg-white border-b border-gray-100 px-6 h-[60px] flex items-center justify-between shrink-0 shadow-sm">
-          {/* Page title */}
-          <div className="flex items-center gap-3">
-            <div>
-              <h1 className="text-base font-bold text-gray-900 leading-none capitalize">
-                {activePanel === 'settings' ? 'Settings'
-                  : activePanel === 'dashboard' ? 'Dashboard'
-                  : activePanel === 'analytics' ? 'Analytics'
-                  : activePanel.charAt(0).toUpperCase() + activePanel.slice(1)}
-              </h1>
-              <p className="text-[11px] text-gray-400 mt-0.5">{companyName} · {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</p>
-            </div>
+        <div className="bg-white border-b border-gray-100 px-4 h-[54px] flex items-center gap-3 shrink-0">
+          {/* Global search */}
+          <div className="relative flex-1 max-w-sm">
+            <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+            <input
+              ref={globalSearchRef}
+              onFocus={() => setShowCommandPalette(true)}
+              readOnly
+              placeholder="Search… Press / or ⌘K"
+              className="w-full pl-8 pr-3 py-1.5 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-300 cursor-pointer"
+            />
           </div>
+          {/* Cmd+K hint */}
+          <button onClick={() => setShowCommandPalette(true)} className="hidden sm:flex items-center gap-1 px-2 py-1 border border-gray-200 rounded text-[10px] text-gray-400 hover:border-gray-300 hover:text-gray-600 transition-colors shrink-0">
+            <span>⌘K</span>
+          </button>
           <div className="flex items-center gap-2">
             {/* Bug Report */}
             <button
@@ -6609,6 +9333,16 @@ export default function AdminPortal() {
           {renderPanel()}
         </div>
       </div>
+
+      {/* Command Palette */}
+      <CommandPalette
+        open={showCommandPalette}
+        onClose={() => setShowCommandPalette(false)}
+        setActivePanel={setActivePanel}
+        tenants={tenants}
+        properties={propertiesList}
+        tickets={tickets}
+      />
 
       {/* Modals */}
       {showInviteModal && (
