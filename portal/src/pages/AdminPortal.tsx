@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, Building2, Users, Wrench, MessageSquare, FileText,
@@ -6,7 +6,7 @@ import {
   Smile, Paperclip, Edit2, Home, DollarSign, Bell, X,
   Eye, EyeOff, Camera, Pencil, CheckCircle, LogOut, HelpCircle,
   Keyboard, TrendingUp, BarChart2, AlertTriangle, Search, ChevronUp, ChevronDown,
-  CreditCard, Receipt, AlertCircle, Trash2,
+  CreditCard, Receipt, AlertCircle, Trash2, Upload, ClipboardList,
 } from 'lucide-react'
 import {
   XAxis, YAxis, CartesianGrid, Tooltip,
@@ -111,6 +111,7 @@ function InviteTenantModal({ properties, onClose, onAdd }: InviteTenantModalProp
   const [form, setForm] = useState({
     name: '', email: '', phone: '', unit: '', property: '', rent: '', leaseStart: '', leaseEnd: '',
     emergencyName: '', emergencyPhone: '', moveIn: '', deposit: '', petPolicy: 'No Pets', parking: '', notes: '',
+    rentDueDay: '',
   })
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [photoPreview, setPhotoPreview] = useState<string | null>(null)
@@ -153,6 +154,7 @@ function InviteTenantModal({ properties, onClose, onAdd }: InviteTenantModalProp
       status: 'invited',
       invite_token: inviteToken,
       notes: form.notes.trim() || null,
+      rent_due_day: form.rentDueDay ? Number(form.rentDueDay) : null,
     }).select().single()
 
     setSubmitting(false)
@@ -256,6 +258,17 @@ function InviteTenantModal({ properties, onClose, onAdd }: InviteTenantModalProp
               <div className="grid grid-cols-2 gap-4">
                 {fi('rent', 'Monthly Rent ($)', 'number', true)}
                 {fi('deposit', 'Security Deposit ($)', 'number')}
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Rent Due Day <span className="font-normal text-gray-400">(optional)</span></label>
+                <select value={form.rentDueDay} onChange={e => setForm({ ...form, rentDueDay: e.target.value })}
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                  <option value="">No reminder set</option>
+                  {Array.from({ length: 28 }, (_, i) => i + 1).map(d => (
+                    <option key={d} value={d}>{d}{d === 1 ? 'st' : d === 2 ? 'nd' : d === 3 ? 'rd' : 'th'} of each month</option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-gray-400 mt-1">Tenant sees a "Due Today" reminder on this day each month</p>
               </div>
               <div className="grid grid-cols-3 gap-4">
                 {fi('moveIn', 'Move-in Date', 'date')}
@@ -959,6 +972,9 @@ function ReportModal({ onClose }: { onClose: () => void }) {
 
 // ─── Announcement Modal ───────────────────────────────────────────────────────
 
+type AnnouncePriority = 'normal' | 'high' | 'urgent'
+type AnnounceCategory = 'general' | 'maintenance' | 'policy' | 'event' | 'emergency'
+
 interface AnnouncementModalProps {
   tenants: Tenant[]
   properties: Property[]
@@ -966,86 +982,207 @@ interface AnnouncementModalProps {
   onSent?: (subject: string, count: number) => void
 }
 
+const ANNOUNCE_PRIORITIES: { value: AnnouncePriority; label: string; color: string; bg: string; border: string }[] = [
+  { value: 'normal', label: 'Normal', color: 'text-gray-700', bg: 'bg-gray-50', border: 'border-gray-300' },
+  { value: 'high', label: 'High', color: 'text-orange-700', bg: 'bg-orange-50', border: 'border-orange-400' },
+  { value: 'urgent', label: 'Urgent', color: 'text-red-700', bg: 'bg-red-50', border: 'border-red-500' },
+]
+
+const ANNOUNCE_CATEGORIES: { value: AnnounceCategory; label: string }[] = [
+  { value: 'general', label: 'General Notice' },
+  { value: 'maintenance', label: 'Maintenance Notice' },
+  { value: 'policy', label: 'Policy Update' },
+  { value: 'event', label: 'Community Event' },
+  { value: 'emergency', label: 'Emergency' },
+]
+
 function AnnouncementModal({ tenants, properties, onClose, onSent }: AnnouncementModalProps) {
   const { companyName } = useBranding()
-  const [form, setForm] = useState({ recipient: 'all', property: '', subject: '', message: '' })
+  const [form, setForm] = useState({
+    recipient: 'all' as 'all' | 'property' | 'tenant',
+    property: '',
+    tenantId: '',
+    subject: '',
+    message: '',
+    priority: 'normal' as AnnouncePriority,
+    category: 'general' as AnnounceCategory,
+    pinBanner: false,
+  })
   const [errors, setErrors] = useState<Record<string, string>>({})
 
   function handleSend() {
     const e: Record<string, string> = {}
     if (!form.subject.trim()) e.subject = 'Required'
     if (!form.message.trim()) e.message = 'Required'
+    if (form.recipient === 'property' && !form.property) e.property = 'Select a property'
+    if (form.recipient === 'tenant' && !form.tenantId) e.tenant = 'Select a tenant'
     if (Object.keys(e).length > 0) { setErrors(e); return }
-    const recipients = form.recipient === 'all' ? tenants
-      : tenants.filter((t) => t.property === form.property)
+
+    let recipients: Tenant[]
+    if (form.recipient === 'all') recipients = tenants
+    else if (form.recipient === 'property') recipients = tenants.filter(t => t.property === form.property)
+    else recipients = tenants.filter(t => t.id === form.tenantId)
+
     const count = recipients.length
-    // Notify each recipient in their portal
+    const link = `/tenant?p=${form.priority}&c=${form.category}&pin=${form.pinBanner ? '1' : '0'}`
     for (const t of recipients) {
-      notifyUser(t.id, { type: 'announcement', title: form.subject, body: form.message, link: '/tenant' })
+      notifyUser(t.id, { type: 'announcement', title: form.subject, body: form.message, link })
     }
     showToast({ type: 'success', title: `Announcement sent to ${count} tenant${count !== 1 ? 's' : ''}` })
     onSent?.(form.subject, count)
     onClose()
   }
 
+  const priorityStyle = ANNOUNCE_PRIORITIES.find(p => p.value === form.priority)!
+
   return (
     <ModalBackdrop onClose={onClose}>
-      <div className="bg-white rounded-xl border border-gray-200 shadow-lg w-full max-w-md animate-scale-in">
+      <div className="bg-white rounded-xl border border-gray-200 shadow-lg w-full max-w-lg animate-scale-in">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-          <h2 className="text-lg font-bold text-gray-900">Send Announcement</h2>
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+              <Bell className="w-4 h-4 text-blue-600" />
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-gray-900">Send Announcement</h2>
+              <p className="text-xs text-gray-400">From {companyName}</p>
+            </div>
+          </div>
           <button onClick={onClose} className="w-8 h-8 rounded-lg bg-gray-100 hover:bg-gray-200 flex items-center justify-center"><X className="w-4 h-4" /></button>
         </div>
-        <div className="p-6 space-y-4">
-          <div className="bg-gray-50 rounded-xl p-3">
-            <p className="text-xs text-gray-500">From</p>
-            <p className="text-sm font-semibold text-gray-900">{companyName}</p>
-          </div>
+        <div className="p-6 space-y-5 max-h-[80vh] overflow-y-auto">
+
+          {/* Priority */}
           <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-1">Recipients</label>
+            <label className="block text-xs font-semibold text-gray-600 mb-2">Priority</label>
             <div className="flex gap-2">
-              {['all', 'property'].map((v) => (
+              {ANNOUNCE_PRIORITIES.map(p => (
+                <button
+                  key={p.value}
+                  onClick={() => setForm(f => ({ ...f, priority: p.value }))}
+                  className={`flex-1 py-2 rounded-xl text-sm font-semibold border-2 transition-all ${
+                    form.priority === p.value ? `${p.bg} ${p.border} ${p.color}` : 'border-gray-200 text-gray-500 hover:bg-gray-50'
+                  }`}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Category */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-2">Category</label>
+            <div className="flex flex-wrap gap-2">
+              {ANNOUNCE_CATEGORIES.map(c => (
+                <button
+                  key={c.value}
+                  onClick={() => setForm(f => ({ ...f, category: c.value }))}
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
+                    form.category === c.value ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                  }`}
+                >
+                  {c.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Recipients */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-2">Recipients</label>
+            <div className="flex gap-2 mb-2">
+              {([['all', 'All Tenants'], ['property', 'By Property'], ['tenant', 'Specific Tenant']] as const).map(([v, label]) => (
                 <button
                   key={v}
-                  onClick={() => setForm({ ...form, recipient: v })}
-                  className={`flex-1 py-2 rounded-xl text-sm font-semibold border transition-colors ${form.recipient === v ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+                  onClick={() => setForm(f => ({ ...f, recipient: v }))}
+                  className={`flex-1 py-2 rounded-xl text-xs font-semibold border transition-colors ${form.recipient === v ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}
                 >
-                  {v === 'all' ? 'All Tenants' : 'By Property'}
+                  {label}
                 </button>
               ))}
             </div>
             {form.recipient === 'property' && (
               <select
                 value={form.property}
-                onChange={(e) => setForm({ ...form, property: e.target.value })}
-                className="mt-2 w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                onChange={e => setForm(f => ({ ...f, property: e.target.value }))}
+                className={`w-full px-3 py-2 text-sm border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white ${errors.property ? 'border-red-400' : 'border-gray-200'}`}
               >
                 <option value="">Select property…</option>
-                {properties.map((p) => <option key={p.id} value={p.name}>{p.name}</option>)}
+                {properties.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
               </select>
             )}
+            {form.recipient === 'tenant' && (
+              <select
+                value={form.tenantId}
+                onChange={e => setForm(f => ({ ...f, tenantId: e.target.value }))}
+                className={`w-full px-3 py-2 text-sm border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white ${errors.tenant ? 'border-red-400' : 'border-gray-200'}`}
+              >
+                <option value="">Select tenant…</option>
+                {tenants.map(t => <option key={t.id} value={t.id}>{t.name} — {t.property} Unit {t.unit}</option>)}
+              </select>
+            )}
+            {(errors.property || errors.tenant) && <p className="text-xs text-red-500 mt-0.5">{errors.property || errors.tenant}</p>}
           </div>
+
+          {/* Subject */}
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1">Subject *</label>
             <input
               value={form.subject}
-              onChange={(e) => setForm({ ...form, subject: e.target.value })}
+              onChange={e => setForm(f => ({ ...f, subject: e.target.value }))}
+              placeholder="e.g. Water Shutdown Notice – Nov 12"
               className={`w-full px-3 py-2 text-sm border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.subject ? 'border-red-400' : 'border-gray-200'}`}
             />
             {errors.subject && <p className="text-xs text-red-500 mt-0.5">{errors.subject}</p>}
           </div>
+
+          {/* Message */}
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1">Message *</label>
             <textarea
               value={form.message}
-              onChange={(e) => setForm({ ...form, message: e.target.value })}
-              rows={4}
+              onChange={e => setForm(f => ({ ...f, message: e.target.value }))}
+              rows={5}
+              placeholder="Type your announcement here…"
               className={`w-full px-3 py-2 text-sm border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none ${errors.message ? 'border-red-400' : 'border-gray-200'}`}
             />
             {errors.message && <p className="text-xs text-red-500 mt-0.5">{errors.message}</p>}
           </div>
-          <div className="flex gap-3">
+
+          {/* Pin as banner */}
+          <label className="flex items-center gap-3 cursor-pointer select-none">
+            <div
+              onClick={() => setForm(f => ({ ...f, pinBanner: !f.pinBanner }))}
+              className={`relative w-9 h-5 rounded-full transition-colors ${form.pinBanner ? 'bg-blue-600' : 'bg-gray-300'}`}
+            >
+              <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${form.pinBanner ? 'translate-x-4' : ''}`} />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-gray-700">Pin as banner on tenant screen</p>
+              <p className="text-xs text-gray-400">Tenants will see a prominent banner at the top of their portal</p>
+            </div>
+          </label>
+
+          {/* Preview */}
+          <div className={`rounded-xl border-2 p-3 ${priorityStyle.border} ${priorityStyle.bg}`}>
+            <p className="text-[10px] font-bold uppercase tracking-widest mb-1 ${priorityStyle.color} opacity-60">Preview</p>
+            <p className={`text-sm font-bold ${priorityStyle.color}`}>{form.subject || 'Your subject here'}</p>
+            <p className="text-xs text-gray-600 mt-0.5 line-clamp-2">{form.message || 'Your message preview will appear here…'}</p>
+            <div className="flex items-center gap-2 mt-1.5">
+              <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${priorityStyle.bg} ${priorityStyle.color} border ${priorityStyle.border}`}>{priorityStyle.label}</span>
+              <span className="text-[10px] text-gray-400">{ANNOUNCE_CATEGORIES.find(c => c.value === form.category)?.label}</span>
+            </div>
+          </div>
+
+          <div className="flex gap-3 pt-1">
             <button onClick={onClose} className="flex-1 border border-gray-200 hover:bg-gray-50 text-gray-700 font-semibold py-2.5 rounded-xl text-sm transition-colors">Cancel</button>
-            <button onClick={handleSend} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors">Send</button>
+            <button
+              onClick={handleSend}
+              className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors flex items-center justify-center gap-2"
+            >
+              <Send className="w-4 h-4" /> Send Announcement
+            </button>
           </div>
         </div>
       </div>
@@ -1053,62 +1190,149 @@ function AnnouncementModal({ tenants, properties, onClose, onSent }: Announcemen
   )
 }
 
-// ─── Schedule Inspection Modal ────────────────────────────────────────────────
+// ─── Inspections Sub-panel (inside Maintenance) ───────────────────────────────
 
-interface ScheduleInspectionModalProps {
-  properties: Property[]
-  onClose: () => void
+interface Inspection {
+  id: string
+  property: string
+  propertyId: string
+  unit: string
+  type: 'routine' | 'move_in' | 'move_out' | 'emergency' | 'annual'
+  date: string
+  time: string
+  inspectorName: string
+  inspectorPhone: string
+  durationEstimate: string
+  entryNoticeSent: boolean
+  accessInstructions: string
+  checklistItems: string
+  findings: string
+  followUpActions: string
+  status: 'scheduled' | 'in_progress' | 'completed' | 'cancelled'
+  createdAt: string
 }
 
-function ScheduleInspectionModal({ properties, onClose }: ScheduleInspectionModalProps) {
-  const [form, setForm] = useState({ property: '', unit: '', date: '', time: '', inspector: '', notes: '' })
-  const [errors, setErrors] = useState<Record<string, string>>({})
+const INSPECTION_TYPES = [
+  { value: 'routine', label: 'Routine', color: 'bg-blue-100 text-blue-700' },
+  { value: 'move_in', label: 'Move-In', color: 'bg-green-100 text-green-700' },
+  { value: 'move_out', label: 'Move-Out', color: 'bg-purple-100 text-purple-700' },
+  { value: 'emergency', label: 'Emergency', color: 'bg-red-100 text-red-700' },
+  { value: 'annual', label: 'Annual', color: 'bg-amber-100 text-amber-700' },
+] as const
 
-  function handleSubmit() {
+const INSPECTION_STATUSES = [
+  { value: 'scheduled', label: 'Scheduled', color: 'bg-blue-100 text-blue-700' },
+  { value: 'in_progress', label: 'In Progress', color: 'bg-amber-100 text-amber-700' },
+  { value: 'completed', label: 'Completed', color: 'bg-green-100 text-green-700' },
+  { value: 'cancelled', label: 'Cancelled', color: 'bg-gray-100 text-gray-500' },
+] as const
+
+const DURATION_OPTIONS = ['30 minutes', '1 hour', '1.5 hours', '2 hours', '3 hours', 'Half day', 'Full day']
+
+function emptyInspectionForm() {
+  return {
+    property: '', propertyId: '', unit: '',
+    type: 'routine' as Inspection['type'],
+    date: '', time: '', inspectorName: '', inspectorPhone: '',
+    durationEstimate: '1 hour', entryNoticeSent: false,
+    accessInstructions: '', checklistItems: '', findings: '', followUpActions: '',
+    status: 'scheduled' as Inspection['status'],
+  }
+}
+
+function InspectionFormModal({
+  properties, initial, onClose, onSave,
+}: {
+  properties: Property[]
+  initial?: Partial<Inspection>
+  onClose: () => void
+  onSave: (data: ReturnType<typeof emptyInspectionForm>) => Promise<void>
+}) {
+  const [form, setForm] = useState({ ...emptyInspectionForm(), ...initial })
+  const [errors, setErrors] = useState<Record<string, string>>({})
+  const [saving, setSaving] = useState(false)
+
+  function set(patch: Partial<typeof form>) { setForm(f => ({ ...f, ...patch })) }
+
+  async function handleSave() {
     const e: Record<string, string> = {}
     if (!form.property) e.property = 'Required'
     if (!form.date) e.date = 'Required'
-    if (Object.keys(e).length > 0) { setErrors(e); return }
-    showToast({ type: 'success', title: `Inspection scheduled at ${form.property} on ${form.date}` })
-    onClose()
+    if (!form.inspectorName.trim()) e.inspectorName = 'Required'
+    if (Object.keys(e).length) { setErrors(e); return }
+    setSaving(true)
+    await onSave(form)
+    setSaving(false)
   }
+
+  const selectedProp = properties.find(p => p.name === form.property)
 
   return (
     <ModalBackdrop onClose={onClose}>
-      <div className="bg-white rounded-xl border border-gray-200 shadow-lg w-full max-w-md animate-scale-in">
+      <div className="bg-white rounded-xl border border-gray-200 shadow-lg w-full max-w-lg animate-scale-in">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-          <h2 className="text-lg font-bold text-gray-900">Schedule Inspection</h2>
+          <div>
+            <h2 className="text-base font-bold text-gray-900">{initial?.id ? 'Edit Inspection' : 'Schedule Inspection'}</h2>
+            <p className="text-xs text-gray-400">Fill in inspection details below</p>
+          </div>
           <button onClick={onClose} className="w-8 h-8 rounded-lg bg-gray-100 hover:bg-gray-200 flex items-center justify-center"><X className="w-4 h-4" /></button>
         </div>
-        <div className="p-6 space-y-4">
+        <div className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
+
+          {/* Inspection Type */}
           <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-1">Property *</label>
-            <select
-              value={form.property}
-              onChange={(e) => setForm({ ...form, property: e.target.value })}
-              className={`w-full px-3 py-2 text-sm border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white ${errors.property ? 'border-red-400' : 'border-gray-200'}`}
-            >
-              <option value="">Select property…</option>
-              {properties.map((p) => <option key={p.id} value={p.name}>{p.name}</option>)}
-            </select>
-            {errors.property && <p className="text-xs text-red-500 mt-0.5">{errors.property}</p>}
+            <label className="block text-xs font-semibold text-gray-600 mb-2">Inspection Type *</label>
+            <div className="flex flex-wrap gap-2">
+              {INSPECTION_TYPES.map(t => (
+                <button
+                  key={t.value}
+                  onClick={() => set({ type: t.value })}
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold border-2 transition-all ${
+                    form.type === t.value ? `${t.color} border-current` : 'border-gray-200 text-gray-500 hover:bg-gray-50'
+                  }`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
           </div>
-          <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-1">Unit (optional)</label>
-            <input
-              value={form.unit}
-              onChange={(e) => setForm({ ...form, unit: e.target.value })}
-              placeholder="e.g. 1A (leave blank for whole property)"
-              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+
+          {/* Property + Unit */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">Property *</label>
+              <select
+                value={form.property}
+                onChange={e => {
+                  const p = properties.find(x => x.name === e.target.value)
+                  set({ property: e.target.value, propertyId: p?.id ?? '' })
+                }}
+                className={`w-full px-3 py-2 text-sm border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white ${errors.property ? 'border-red-400' : 'border-gray-200'}`}
+              >
+                <option value="">Select…</option>
+                {properties.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+              </select>
+              {errors.property && <p className="text-xs text-red-500 mt-0.5">{errors.property}</p>}
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">Unit <span className="font-normal text-gray-400">(optional)</span></label>
+              <input
+                value={form.unit}
+                onChange={e => set({ unit: e.target.value })}
+                placeholder={selectedProp ? `e.g. 1A` : 'Select property first'}
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
           </div>
-          <div className="grid grid-cols-2 gap-4">
+
+          {/* Date + Time */}
+          <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-gray-600 mb-1">Date *</label>
               <input
                 type="date"
                 value={form.date}
-                onChange={(e) => setForm({ ...form, date: e.target.value })}
+                onChange={e => set({ date: e.target.value })}
                 className={`w-full px-3 py-2 text-sm border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.date ? 'border-red-400' : 'border-gray-200'}`}
               />
               {errors.date && <p className="text-xs text-red-500 mt-0.5">{errors.date}</p>}
@@ -1118,35 +1342,411 @@ function ScheduleInspectionModal({ properties, onClose }: ScheduleInspectionModa
               <input
                 type="time"
                 value={form.time}
-                onChange={(e) => setForm({ ...form, time: e.target.value })}
+                onChange={e => set({ time: e.target.value })}
                 className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
           </div>
-          <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-1">Inspector Name</label>
-            <input
-              value={form.inspector}
-              onChange={(e) => setForm({ ...form, inspector: e.target.value })}
-              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+
+          {/* Inspector */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">Inspector Name *</label>
+              <input
+                value={form.inspectorName}
+                onChange={e => set({ inspectorName: e.target.value })}
+                placeholder="Full name"
+                className={`w-full px-3 py-2 text-sm border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.inspectorName ? 'border-red-400' : 'border-gray-200'}`}
+              />
+              {errors.inspectorName && <p className="text-xs text-red-500 mt-0.5">{errors.inspectorName}</p>}
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">Inspector Phone</label>
+              <input
+                type="tel"
+                value={form.inspectorPhone}
+                onChange={e => set({ inspectorPhone: e.target.value })}
+                placeholder="+1 (555) 000-0000"
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
           </div>
+
+          {/* Duration + Entry notice */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">Duration Estimate</label>
+              <select
+                value={form.durationEstimate}
+                onChange={e => set({ durationEstimate: e.target.value })}
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+              >
+                {DURATION_OPTIONS.map(d => <option key={d} value={d}>{d}</option>)}
+              </select>
+            </div>
+            <div className="flex items-end pb-2">
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={form.entryNoticeSent}
+                  onChange={e => set({ entryNoticeSent: e.target.checked })}
+                  className="w-4 h-4 rounded border-gray-300 text-blue-600"
+                />
+                <span className="text-sm text-gray-700 font-medium">Entry notice sent</span>
+              </label>
+            </div>
+          </div>
+
+          {/* Access Instructions */}
           <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-1">Notes</label>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Access Instructions</label>
             <textarea
-              value={form.notes}
-              onChange={(e) => setForm({ ...form, notes: e.target.value })}
-              rows={3}
+              value={form.accessInstructions}
+              onChange={e => set({ accessInstructions: e.target.value })}
+              rows={2}
+              placeholder="e.g. Key in lockbox #4, code 1234. Ring doorbell twice."
               className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
             />
           </div>
-          <div className="flex gap-3">
+
+          {/* Checklist Items */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Checklist Items <span className="font-normal text-gray-400">(one per line)</span></label>
+            <textarea
+              value={form.checklistItems}
+              onChange={e => set({ checklistItems: e.target.value })}
+              rows={3}
+              placeholder={"HVAC filter\nSmoke detectors\nPlumbing under sinks\nWindow seals"}
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none font-mono text-xs"
+            />
+          </div>
+
+          {/* Findings / Follow-up */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Findings / Notes</label>
+            <textarea
+              value={form.findings}
+              onChange={e => set({ findings: e.target.value })}
+              rows={2}
+              placeholder="Document any issues found during inspection…"
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Follow-Up Actions</label>
+            <textarea
+              value={form.followUpActions}
+              onChange={e => set({ followUpActions: e.target.value })}
+              rows={2}
+              placeholder="e.g. Replace HVAC filter within 2 weeks, schedule plumber…"
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+            />
+          </div>
+
+          {/* Status (only when editing) */}
+          {initial?.id && (
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-2">Status</label>
+              <div className="flex gap-2 flex-wrap">
+                {INSPECTION_STATUSES.map(s => (
+                  <button
+                    key={s.value}
+                    onClick={() => set({ status: s.value })}
+                    className={`px-3 py-1.5 rounded-full text-xs font-semibold border-2 transition-all ${
+                      form.status === s.value ? `${s.color} border-current` : 'border-gray-200 text-gray-500 hover:bg-gray-50'
+                    }`}
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="flex gap-3 pt-1">
             <button onClick={onClose} className="flex-1 border border-gray-200 hover:bg-gray-50 text-gray-700 font-semibold py-2.5 rounded-xl text-sm transition-colors">Cancel</button>
-            <button onClick={handleSubmit} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors">Schedule</button>
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors flex items-center justify-center gap-2"
+            >
+              {saving && <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+              {initial?.id ? 'Save Changes' : 'Schedule Inspection'}
+            </button>
           </div>
         </div>
       </div>
     </ModalBackdrop>
+  )
+}
+
+function InspectionsSubPanel({ properties }: { properties: Property[] }) {
+  const [inspections, setInspections] = useState<Inspection[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [showForm, setShowForm] = useState(false)
+  const [editInspection, setEditInspection] = useState<Inspection | null>(null)
+  const [filterStatus, setFilterStatus] = useState<string>('all')
+
+  useEffect(() => {
+    async function load() {
+      setLoading(true)
+      const { data, error: err } = await supabase
+        .from('inspections')
+        .select('*')
+        .order('date', { ascending: true })
+      if (err) {
+        setError(err.message)
+      } else {
+        setInspections((data ?? []).map((r: Record<string, unknown>) => ({
+          id: r.id as string,
+          property: r.property as string,
+          propertyId: (r.property_id as string) ?? '',
+          unit: (r.unit as string) ?? '',
+          type: (r.type as Inspection['type']) ?? 'routine',
+          date: (r.date as string) ?? '',
+          time: (r.time as string) ?? '',
+          inspectorName: (r.inspector_name as string) ?? '',
+          inspectorPhone: (r.inspector_phone as string) ?? '',
+          durationEstimate: (r.duration_estimate as string) ?? '1 hour',
+          entryNoticeSent: Boolean(r.entry_notice_sent),
+          accessInstructions: (r.access_instructions as string) ?? '',
+          checklistItems: (r.checklist_items as string) ?? '',
+          findings: (r.findings as string) ?? '',
+          followUpActions: (r.follow_up_actions as string) ?? '',
+          status: (r.status as Inspection['status']) ?? 'scheduled',
+          createdAt: (r.created_at as string) ?? '',
+        })))
+      }
+      setLoading(false)
+    }
+    load()
+  }, [])
+
+  async function handleSave(form: ReturnType<typeof emptyInspectionForm>, existingId?: string) {
+    const isUuid = (v: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v)
+    const { data: { user } } = await supabase.auth.getUser()
+    const payload = {
+      pm_id: user?.id ?? null,
+      property: form.property,
+      property_id: form.propertyId && isUuid(form.propertyId) ? form.propertyId : null,
+      unit: form.unit || null,
+      type: form.type,
+      date: form.date,
+      time: form.time || null,
+      inspector_name: form.inspectorName,
+      inspector_phone: form.inspectorPhone || null,
+      duration_estimate: form.durationEstimate,
+      entry_notice_sent: form.entryNoticeSent,
+      access_instructions: form.accessInstructions || null,
+      checklist_items: form.checklistItems || null,
+      findings: form.findings || null,
+      follow_up_actions: form.followUpActions || null,
+      status: form.status,
+    }
+    if (existingId) {
+      const { error: err } = await supabase.from('inspections').update(payload).eq('id', existingId)
+      if (err) { showToast({ type: 'error', title: 'Failed to update', message: err.message }); return }
+      setInspections(prev => prev.map(i => i.id === existingId ? { ...i, ...form, id: existingId } : i))
+      showToast({ type: 'success', title: 'Inspection updated' })
+      setEditInspection(null)
+    } else {
+      const { data, error: err } = await supabase.from('inspections').insert(payload).select().single()
+      if (err) { showToast({ type: 'error', title: 'Failed to schedule', message: err.message }); return }
+      const newRow = data as Record<string, unknown>
+      setInspections(prev => [{
+        id: newRow.id as string,
+        property: form.property,
+        propertyId: form.propertyId,
+        unit: form.unit,
+        type: form.type,
+        date: form.date,
+        time: form.time,
+        inspectorName: form.inspectorName,
+        inspectorPhone: form.inspectorPhone,
+        durationEstimate: form.durationEstimate,
+        entryNoticeSent: form.entryNoticeSent,
+        accessInstructions: form.accessInstructions,
+        checklistItems: form.checklistItems,
+        findings: form.findings,
+        followUpActions: form.followUpActions,
+        status: form.status,
+        createdAt: new Date().toISOString(),
+      }, ...prev])
+      showToast({ type: 'success', title: `Inspection scheduled at ${form.property}` })
+      setShowForm(false)
+    }
+  }
+
+  async function handleStatusChange(id: string, status: Inspection['status']) {
+    await supabase.from('inspections').update({ status }).eq('id', id)
+    setInspections(prev => prev.map(i => i.id === id ? { ...i, status } : i))
+  }
+
+  const filtered = filterStatus === 'all' ? inspections : inspections.filter(i => i.status === filterStatus)
+  const typeMeta = (t: string) => INSPECTION_TYPES.find(x => x.value === t) ?? INSPECTION_TYPES[0]
+  const statusMeta = (s: string) => INSPECTION_STATUSES.find(x => x.value === s) ?? INSPECTION_STATUSES[0]
+
+  if (loading) {
+    return <div className="p-6 space-y-3">{[0,1,2].map(i => <div key={i} className="h-16 bg-gray-100 animate-pulse rounded-xl" />)}</div>
+  }
+
+  if (error) {
+    return (
+      <div className="p-6">
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-5">
+          <p className="text-sm font-bold text-amber-900 mb-2">Inspections table not set up</p>
+          <p className="text-xs text-amber-700 mb-3">Run this SQL in your Supabase dashboard to enable inspections:</p>
+          <pre className="bg-white border border-amber-200 rounded-lg p-3 text-xs text-gray-800 overflow-x-auto whitespace-pre-wrap">{`create table if not exists public.inspections (
+  id uuid primary key default gen_random_uuid(),
+  pm_id uuid references auth.users(id) on delete cascade,
+  property text not null,
+  property_id uuid references public.properties(id),
+  unit text,
+  type text not null default 'routine',
+  date date not null,
+  time text,
+  inspector_name text not null,
+  inspector_phone text,
+  duration_estimate text default '1 hour',
+  entry_notice_sent boolean default false,
+  access_instructions text,
+  checklist_items text,
+  findings text,
+  follow_up_actions text,
+  status text not null default 'scheduled',
+  created_at timestamptz default now()
+);
+alter table public.inspections enable row level security;
+create policy "PM full access" on public.inspections
+  using (pm_id = auth.uid()) with check (pm_id = auth.uid());`}</pre>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="p-6 space-y-5 animate-slide-up">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-base font-bold text-gray-900">Inspections</h3>
+          <p className="text-xs text-gray-500">{inspections.filter(i => i.status === 'scheduled').length} upcoming</p>
+        </div>
+        <button
+          onClick={() => setShowForm(true)}
+          className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2 rounded-xl flex items-center gap-2 transition-colors"
+        >
+          <Plus className="w-4 h-4" /> New Inspection
+        </button>
+      </div>
+
+      {/* Status filter */}
+      <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
+        {(['all', 'scheduled', 'in_progress', 'completed', 'cancelled'] as const).map(s => (
+          <button
+            key={s}
+            onClick={() => setFilterStatus(s)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${filterStatus === s ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
+          >
+            {s === 'all' ? 'All' : s === 'in_progress' ? 'In Progress' : s.charAt(0).toUpperCase() + s.slice(1)}
+          </button>
+        ))}
+      </div>
+
+      {/* List */}
+      {filtered.length === 0 ? (
+        <div className="bg-white rounded-xl border border-gray-200 p-10 text-center">
+          <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
+            <CheckCircle className="w-6 h-6 text-gray-400" />
+          </div>
+          <p className="text-sm font-semibold text-gray-600">No inspections yet</p>
+          <p className="text-xs text-gray-400 mt-1">Click "New Inspection" to schedule one</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {filtered.map(insp => {
+            const tm = typeMeta(insp.type)
+            const sm = statusMeta(insp.status)
+            return (
+              <div key={insp.id} className="bg-white rounded-xl border border-gray-200 p-4 hover:shadow-sm transition-shadow">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap mb-1">
+                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${tm.color}`}>{tm.label}</span>
+                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${sm.color}`}>{sm.label}</span>
+                      {insp.entryNoticeSent && <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-teal-100 text-teal-700">Notice Sent</span>}
+                    </div>
+                    <p className="text-sm font-bold text-gray-900 truncate">{insp.property}{insp.unit ? ` — Unit ${insp.unit}` : ''}</p>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      {insp.date && new Date(insp.date + 'T00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                      {insp.time && ` at ${insp.time}`}
+                      {insp.durationEstimate && ` · ${insp.durationEstimate}`}
+                    </p>
+                    <p className="text-xs text-gray-500">Inspector: <span className="font-medium text-gray-700">{insp.inspectorName}</span>{insp.inspectorPhone ? ` · ${insp.inspectorPhone}` : ''}</p>
+                    {insp.findings && <p className="text-xs text-amber-700 mt-1 font-medium">Findings: {insp.findings.slice(0, 80)}{insp.findings.length > 80 ? '…' : ''}</p>}
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <select
+                      value={insp.status}
+                      onChange={e => handleStatusChange(insp.id, e.target.value as Inspection['status'])}
+                      onClick={e => e.stopPropagation()}
+                      className="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    >
+                      {INSPECTION_STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                    </select>
+                    <button
+                      onClick={() => setEditInspection(insp)}
+                      className="w-7 h-7 rounded-lg bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-600"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+                {(insp.checklistItems || insp.accessInstructions || insp.followUpActions) && (
+                  <div className="mt-3 pt-3 border-t border-gray-100 grid grid-cols-3 gap-3">
+                    {insp.accessInstructions && (
+                      <div>
+                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-0.5">Access</p>
+                        <p className="text-xs text-gray-600 line-clamp-2">{insp.accessInstructions}</p>
+                      </div>
+                    )}
+                    {insp.checklistItems && (
+                      <div>
+                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-0.5">Checklist</p>
+                        <p className="text-xs text-gray-600 line-clamp-2">{insp.checklistItems.split('\n').filter(Boolean).join(' · ')}</p>
+                      </div>
+                    )}
+                    {insp.followUpActions && (
+                      <div>
+                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-0.5">Follow-up</p>
+                        <p className="text-xs text-gray-600 line-clamp-2">{insp.followUpActions}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {showForm && (
+        <InspectionFormModal
+          properties={properties}
+          onClose={() => setShowForm(false)}
+          onSave={async (form) => { await handleSave(form) }}
+        />
+      )}
+      {editInspection && (
+        <InspectionFormModal
+          properties={properties}
+          initial={editInspection}
+          onClose={() => setEditInspection(null)}
+          onSave={async (form) => { await handleSave(form, editInspection.id) }}
+        />
+      )}
+    </div>
   )
 }
 
@@ -2061,7 +2661,7 @@ function SettingsPanel({ profileName, setProfileName, profilePhoto, setProfilePh
             {/* Accent color */}
             <div>
               <label className="block text-xs font-semibold text-gray-600 mb-2">Accent Color</label>
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2 mb-3">
                 {PRESET_COLORS.map(c => (
                   <button
                     key={c}
@@ -2071,12 +2671,17 @@ function SettingsPanel({ profileName, setProfileName, profilePhoto, setProfilePh
                     title={c}
                   />
                 ))}
-                <label className="flex items-center gap-2 ml-1 px-2 py-1.5 border border-gray-200 rounded-xl cursor-pointer hover:bg-gray-50">
-                  <input type="color" value={brandColor} onChange={e => setBrandColor(e.target.value)} className="w-6 h-6 rounded cursor-pointer border-0 bg-transparent p-0" />
-                  <span className="text-xs font-mono text-gray-600 uppercase">{brandColor}</span>
-                </label>
               </div>
-              <p className="text-xs text-gray-400 mt-2">Recolors buttons, links, and highlights across all three portals.</p>
+              <label className="flex items-center gap-3 px-4 py-3 border-2 border-dashed border-gray-200 rounded-xl cursor-pointer hover:border-gray-400 hover:bg-gray-50 transition-all w-fit">
+                <div className="w-8 h-8 rounded-lg shadow-sm ring-2 ring-white ring-offset-1 ring-offset-gray-100" style={{ background: brandColor }} />
+                <div>
+                  <p className="text-xs font-bold text-gray-700">Custom color</p>
+                  <p className="text-[11px] font-mono text-gray-400 uppercase">{brandColor}</p>
+                </div>
+                <input type="color" value={brandColor} onChange={e => setBrandColor(e.target.value)} className="sr-only" />
+                <span className="text-xs text-blue-600 font-semibold ml-1">Pick →</span>
+              </label>
+              <p className="text-xs text-gray-400 mt-2">Recolors buttons, nav highlights, and accents across all three portals instantly.</p>
             </div>
 
             <div className="flex items-center gap-3 pt-2">
@@ -2384,6 +2989,7 @@ interface DashboardPanelProps {
   onShowReportModal: () => void
   onShowAnnouncementModal: () => void
   onShowScheduleModal: () => void
+  tickets: MaintenanceTicket[]
   tenants: Tenant[]
   properties: Property[]
   rentRecords: RentRecord[]
@@ -2394,8 +3000,38 @@ interface DashboardPanelProps {
 function DashboardPanel({
   setActivePanel, setAnalyticsSection, onShowInviteModal, onShowAddPropertyModal,
   onShowReportModal, onShowAnnouncementModal, onShowScheduleModal,
-  tenants, properties, rentRecords, recentActivity, onConfirmPayment,
+  tickets, tenants, properties, rentRecords, recentActivity, onConfirmPayment,
 }: DashboardPanelProps) {
+  const { primaryColor } = useBranding()
+  const { demoMode } = useDemoMode()
+  const [dashTab, setDashTab] = useState<'tickets' | 'inspections'>('tickets')
+  const [inspPeriod, setInspPeriod] = useState<'week' | 'month'>('week')
+  const [dashInspections, setDashInspections] = useState<Inspection[]>([])
+  useEffect(() => {
+    if (demoMode) return
+    supabase.from('inspections').select('*').in('status', ['scheduled', 'in_progress']).then(({ data }) => {
+      if (data) setDashInspections(data.map((r: Record<string, unknown>) => ({
+        id: r.id as string,
+        property: r.property as string,
+        propertyId: r.property_id as string,
+        unit: r.unit as string,
+        type: r.type as Inspection['type'],
+        date: (r.date as string) ?? '',
+        time: (r.time as string) ?? '',
+        inspectorName: r.inspector_name as string,
+        inspectorPhone: r.inspector_phone as string,
+        durationEstimate: r.duration_estimate as string,
+        entryNoticeSent: r.entry_notice_sent as boolean,
+        accessInstructions: r.access_instructions as string,
+        checklistItems: r.checklist_items as string,
+        findings: r.findings as string,
+        followUpActions: r.follow_up_actions as string,
+        status: r.status as Inspection['status'],
+        createdAt: r.created_at as string,
+      })))
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [demoMode])
   const [editQuickActions, setEditQuickActions] = useState(false)
   const [hiddenActions, setHiddenActions] = useState<Set<string>>(() => {
     try {
@@ -2461,6 +3097,29 @@ function DashboardPanel({
   const collectedCount = activeTenants.filter(t => collectedIds.has(t.id)).length
   const overdueCount = activeTenants.filter(t => !collectedIds.has(t.id)).length
 
+  const [occPeriod, setOccPeriod] = useState<'1M' | '3M' | '6M' | '1Y'>('6M')
+  const occTrendData = useMemo(() => {
+    const months = occPeriod === '1M' ? 1 : occPeriod === '3M' ? 3 : occPeriod === '6M' ? 6 : 12
+    const results: { month: string; rate: number }[] = []
+    const now = new Date()
+    for (let i = months - 1; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+      const monthEnd = new Date(d.getFullYear(), d.getMonth() + 1, 0)
+      const label = d.toLocaleString('en-US', { month: 'short', ...(months === 12 ? { year: '2-digit' } : {}) })
+      let occupied = 0
+      for (const t of tenants) {
+        if (t.status === 'invited') continue
+        const start = t.moveIn ? new Date(t.moveIn) : null
+        const end = t.leaseEnd ? new Date(t.leaseEnd) : null
+        const activeAtMonthEnd = (!start || start <= monthEnd) && (!end || end >= d)
+        if (activeAtMonthEnd) occupied++
+      }
+      const rate = totalUnits > 0 ? Math.min(100, Math.round((occupied / totalUnits) * 100)) : 0
+      results.push({ month: label, rate })
+    }
+    return results
+  }, [occPeriod, tenants, totalUnits])
+
   const kpis = [
     { label: 'Properties', value: String(properties.length), icon: <Building2 className="w-5 h-5" />, trend: null, color: 'text-blue-600 bg-blue-50', section: 'overview' },
     { label: 'Total Units', value: String(totalUnits), icon: <Home className="w-5 h-5" />, trend: null, color: 'text-purple-600 bg-purple-50', section: 'occupancy' },
@@ -2525,49 +3184,178 @@ function DashboardPanel({
         <div className="col-span-3 space-y-5">
           {/* Occupancy Trend */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
-            <h3 className="text-sm font-semibold text-gray-900 mb-4">Occupancy Trend</h3>
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-sm font-semibold text-gray-900">Occupancy Trend</h3>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  {occTrendData.length > 0 ? `${occTrendData[occTrendData.length - 1].rate}% current` : 'No data'}
+                </p>
+              </div>
+              <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
+                {(['1M', '3M', '6M', '1Y'] as const).map(p => (
+                  <button
+                    key={p}
+                    onClick={() => setOccPeriod(p)}
+                    className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-all ${
+                      occPeriod === p ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                    }`}
+                  >{p}</button>
+                ))}
+              </div>
+            </div>
             <ResponsiveContainer width="100%" height={180}>
-              <AreaChart data={totalUnits > 0 ? [{ month: new Date().toLocaleString('en-US', { month: 'short' }), rate: Math.round((totalOccupied / totalUnits) * 100) }] : []}>
+              <AreaChart data={occTrendData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
                 <defs>
                   <linearGradient id="occGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#2563EB" stopOpacity={0.15} />
-                    <stop offset="95%" stopColor="#2563EB" stopOpacity={0} />
+                    <stop offset="5%" stopColor={primaryColor} stopOpacity={0.18} />
+                    <stop offset="95%" stopColor={primaryColor} stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
+                <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" vertical={false} />
                 <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
-                <YAxis domain={[75, 100]} tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} unit="%" />
-                <Tooltip formatter={(v) => [`${v}%`, 'Occupancy']} contentStyle={{ borderRadius: 8, border: '1px solid #E5E7EB', fontSize: 12 }} />
-                <Area type="monotone" dataKey="rate" stroke="#2563EB" strokeWidth={2} fill="url(#occGrad)" />
+                <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} unit="%" width={42} />
+                <Tooltip
+                  formatter={(v) => [`${v}%`, 'Occupancy']}
+                  contentStyle={{ borderRadius: 8, border: '1px solid #E5E7EB', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,.06)' }}
+                  cursor={{ stroke: '#E5E7EB', strokeWidth: 1 }}
+                />
+                <Area type="monotone" dataKey="rate" stroke={primaryColor} strokeWidth={2} fill="url(#occGrad)" dot={occPeriod === '1M' ? { r: 4, fill: primaryColor, strokeWidth: 0 } : false} activeDot={{ r: 5, fill: primaryColor, strokeWidth: 0 }} />
               </AreaChart>
             </ResponsiveContainer>
           </div>
 
-          {/* Recent Activity */}
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
-            <h3 className="text-sm font-semibold text-gray-900 mb-4">Recent Activity</h3>
-            <div className="space-y-3">
-              {recentActivity.slice(0, 8).map((a) => (
-                <div key={a.id} className="flex items-start gap-3">
-                  <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${
-                    a.type === 'payment' ? 'bg-green-100 text-green-600' :
-                    a.type === 'ticket' ? 'bg-amber-100 text-amber-600' :
-                    a.type === 'announcement' ? 'bg-purple-100 text-purple-600' :
-                    'bg-blue-100 text-blue-600'
-                  }`}>
-                    {a.type === 'payment' ? <DollarSign className="w-3.5 h-3.5" /> :
-                     a.type === 'ticket' ? <Wrench className="w-3.5 h-3.5" /> :
-                     a.type === 'announcement' ? <Bell className="w-3.5 h-3.5" /> :
-                     <FileText className="w-3.5 h-3.5" />}
+          {/* Recent Tickets / Upcoming Inspections */}
+          {(() => {
+            const openTickets = tickets
+              .filter(t => t.status !== 'resolved')
+              .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+              .slice(0, 8)
+
+            const now = new Date()
+            const cutoff = new Date(now)
+            if (inspPeriod === 'week') cutoff.setDate(now.getDate() + 7)
+            else cutoff.setMonth(now.getMonth() + 1)
+            const upcomingInspections = dashInspections
+              .filter(i => {
+                if (!i.date) return false
+                const d = new Date(i.date)
+                return d >= now && d <= cutoff
+              })
+              .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+
+            const PRIORITY_META: Record<string, { badge: string; row: string; icon: string; dot: string }> = {
+              emergency: { badge: 'bg-red-100 text-red-700',    row: 'bg-red-50 border border-red-100',    icon: 'bg-red-100 text-red-600',    dot: 'bg-red-500' },
+              high:      { badge: 'bg-orange-100 text-orange-700', row: 'bg-orange-50 border border-orange-100', icon: 'bg-orange-100 text-orange-600', dot: 'bg-orange-500' },
+              medium:    { badge: 'bg-amber-100 text-amber-700', row: 'bg-amber-50 border border-amber-100', icon: 'bg-amber-100 text-amber-600', dot: 'bg-amber-400' },
+              low:       { badge: 'bg-gray-100 text-gray-600',   row: 'hover:bg-gray-50',                   icon: 'bg-gray-100 text-gray-500',   dot: 'bg-gray-300' },
+            }
+
+            return (
+              <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+                {/* Tab bar */}
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex gap-1">
+                    <button
+                      onClick={() => setDashTab('tickets')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${dashTab === 'tickets' ? 'text-white shadow-sm' : 'text-gray-500 hover:text-gray-700 bg-gray-100'}`}
+                      style={dashTab === 'tickets' ? { background: primaryColor } : {}}
+                    >
+                      Tickets {openTickets.length > 0 && <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[10px] ${dashTab === 'tickets' ? 'bg-white/20' : 'bg-gray-200 text-gray-600'}`}>{openTickets.length}</span>}
+                    </button>
+                    <button
+                      onClick={() => setDashTab('inspections')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${dashTab === 'inspections' ? 'text-white shadow-sm' : 'text-gray-500 hover:text-gray-700 bg-gray-100'}`}
+                      style={dashTab === 'inspections' ? { background: primaryColor } : {}}
+                    >
+                      Inspections {upcomingInspections.length > 0 && <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[10px] ${dashTab === 'inspections' ? 'bg-white/20' : 'bg-gray-200 text-gray-600'}`}>{upcomingInspections.length}</span>}
+                    </button>
                   </div>
-                  <div className="flex-1">
-                    <p className="text-sm text-gray-900">{a.text}</p>
-                    <p className="text-xs text-gray-400 mt-0.5">{a.time}</p>
-                  </div>
+                  {dashTab === 'inspections' && (
+                    <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
+                      {(['week', 'month'] as const).map(p => (
+                        <button key={p} onClick={() => setInspPeriod(p)}
+                          className={`px-2.5 py-1 rounded-md text-xs font-semibold capitalize transition-all ${inspPeriod === p ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                        >{p}</button>
+                      ))}
+                    </div>
+                  )}
+                  {dashTab === 'tickets' && (
+                    <button onClick={() => setActivePanel('maintenance')} className="text-xs font-semibold hover:underline" style={{ color: primaryColor }}>View all →</button>
+                  )}
                 </div>
-              ))}
-            </div>
-          </div>
+
+                {/* Tickets list */}
+                {dashTab === 'tickets' && (
+                  <div className="space-y-2">
+                    {openTickets.length === 0 ? (
+                      <div className="text-center py-8">
+                        <Wrench className="w-8 h-8 text-gray-200 mx-auto mb-2" />
+                        <p className="text-sm text-gray-400">No open tickets</p>
+                      </div>
+                    ) : openTickets.map(t => {
+                      const pm = PRIORITY_META[t.priority] ?? PRIORITY_META.low
+                      return (
+                        <div key={t.id} className={`flex items-start gap-3 p-2.5 rounded-xl transition-colors cursor-pointer ${pm.row}`} onClick={() => setActivePanel('maintenance')}>
+                          <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${pm.icon}`}>
+                            <Wrench className="w-3.5 h-3.5" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className="text-sm font-medium text-gray-900 truncate">{t.title}</p>
+                              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full uppercase ${pm.badge}`}>{t.priority}</span>
+                            </div>
+                            <p className="text-xs text-gray-500 mt-0.5">{t.property} · Unit {t.unit} · {t.tenantName}</p>
+                          </div>
+                          <span className={`text-[10px] font-semibold px-2 py-1 rounded-full shrink-0 ${t.status === 'in_progress' ? 'bg-white/60 text-amber-700' : 'bg-white/60 text-gray-600'}`}>
+                            {t.status === 'in_progress' ? 'In Progress' : 'Open'}
+                          </span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+
+                {/* Inspections list */}
+                {dashTab === 'inspections' && (
+                  <div className="space-y-2">
+                    {upcomingInspections.length === 0 ? (
+                      <div className="text-center py-8">
+                        <ClipboardList className="w-8 h-8 text-gray-200 mx-auto mb-2" />
+                        <p className="text-sm text-gray-400">No inspections in the next {inspPeriod}</p>
+                        <button onClick={() => { setActivePanel('maintenance') }} className="mt-2 text-xs font-semibold hover:underline" style={{ color: primaryColor }}>Schedule one →</button>
+                      </div>
+                    ) : upcomingInspections.map(insp => {
+                      const typeInfo = INSPECTION_TYPES.find(x => x.value === insp.type)
+                      const d = new Date(insp.date)
+                      const isToday = d.toDateString() === now.toDateString()
+                      const isTomorrow = d.toDateString() === new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).toDateString()
+                      const dayLabel = isToday ? 'Today' : isTomorrow ? 'Tomorrow' : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                      return (
+                        <div key={insp.id} className="flex items-start gap-3 p-2.5 rounded-xl hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => setActivePanel('maintenance')}>
+                          <div className="w-7 h-7 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                            <ClipboardList className="w-3.5 h-3.5" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className="text-sm font-medium text-gray-900">{insp.property}</p>
+                              {insp.unit && <span className="text-xs text-gray-400">Unit {insp.unit}</span>}
+                              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${typeInfo?.color ?? 'bg-gray-100 text-gray-600'}`}>{typeInfo?.label ?? insp.type}</span>
+                            </div>
+                            <p className="text-xs text-gray-400 mt-0.5">
+                              {dayLabel}{insp.time ? ` at ${insp.time}` : ''}{insp.inspectorName ? ` · ${insp.inspectorName}` : ''}
+                            </p>
+                          </div>
+                          <span className={`text-[10px] font-semibold px-2 py-1 rounded-full shrink-0 ${isToday ? 'bg-amber-50 text-amber-700' : 'bg-blue-50 text-blue-700'}`}>
+                            {dayLabel}
+                          </span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )
+          })()}
         </div>
 
         {/* RIGHT — 40% */}
@@ -2672,6 +3460,278 @@ function DashboardPanel({
 
 // ─── Tenants Panel ────────────────────────────────────────────────────────────
 
+// ─── Import Tenants Modal ─────────────────────────────────────────────────────
+
+const IMPORT_CSV_HEADERS = ['name', 'email', 'phone', 'property', 'unit', 'monthly_rent', 'lease_start', 'lease_end', 'rent_due_day', 'notes']
+
+const EXAMPLE_CSV = [
+  IMPORT_CSV_HEADERS.join(','),
+  'Jane Smith,jane@example.com,555-0101,Maple Heights,1A,1500,2025-01-01,2026-01-01,1,Quiet tenant prefers email',
+  'Robert Kim,robert@example.com,555-0202,Maple Heights,2B,1750,2025-03-01,2026-03-01,15,Has one dog',
+  'Emily Chen,emily@example.com,,Sunset Lofts,3C,2100,2025-06-01,2026-06-01,,',
+].join('\n')
+
+interface ImportRow {
+  row: number
+  name: string
+  email: string
+  phone: string
+  property: string
+  unit: string
+  monthly_rent: string
+  lease_start: string
+  lease_end: string
+  rent_due_day: string
+  notes: string
+  errors: string[]
+}
+
+function parseCSV(text: string): ImportRow[] {
+  const lines = text.split(/\r?\n/).filter(l => l.trim())
+  if (lines.length < 2) return []
+  const header = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/\s+/g, '_'))
+  const idx = (col: string) => header.indexOf(col)
+  return lines.slice(1).map((line, i) => {
+    // simple CSV split — handles no quotes
+    const cols = line.split(',').map(c => c.trim())
+    const get = (col: string) => cols[idx(col)] ?? ''
+    const errors: string[] = []
+    const name = get('name')
+    const email = get('email')
+    const property = get('property')
+    const unit = get('unit')
+    const monthly_rent = get('monthly_rent')
+    const lease_end = get('lease_end')
+    if (!name) errors.push('Name required')
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.push('Valid email required')
+    if (!property) errors.push('Property required')
+    if (!unit) errors.push('Unit required')
+    if (!monthly_rent || isNaN(Number(monthly_rent)) || Number(monthly_rent) < 1) errors.push('Valid monthly rent required')
+    if (!lease_end) errors.push('Lease end required')
+    return {
+      row: i + 2, name, email, phone: get('phone'), property, unit, monthly_rent,
+      lease_start: get('lease_start'), lease_end, rent_due_day: get('rent_due_day'), notes: get('notes'), errors,
+    }
+  })
+}
+
+function ImportTenantsModal({ properties, onClose, onImported }: { properties: Property[]; onClose: () => void; onImported: (count: number) => void }) {
+  const { demoMode } = useDemoMode()
+  const [rows, setRows] = useState<ImportRow[]>([])
+  const [importing, setImporting] = useState(false)
+  const [done, setDone] = useState(false)
+  const [importedCount, setImportedCount] = useState(0)
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [dragOver, setDragOver] = useState(false)
+
+  function downloadExample() {
+    const blob = new Blob([EXAMPLE_CSV], { type: 'text/csv' })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = 'import_tenants_example.csv'
+    a.click()
+    URL.revokeObjectURL(a.href)
+  }
+
+  function handleFile(file: File) {
+    const reader = new FileReader()
+    reader.onload = (e) => setRows(parseCSV(e.target?.result as string))
+    reader.readAsText(file)
+  }
+
+  async function handleImport() {
+    if (demoMode) { showToast({ type: 'info', title: 'Demo mode — no changes saved' }); onClose(); return }
+    const valid = rows.filter(r => r.errors.length === 0)
+    if (valid.length === 0) return
+    setImporting(true)
+    const { data: { user: pmUser } } = await supabase.auth.getUser()
+    let count = 0
+    for (const row of valid) {
+      const prop = properties.find(p => p.name.toLowerCase().trim() === row.property.toLowerCase().trim())
+      if (!prop) continue
+      const unitId = await findOrCreateUnit(prop.id, row.unit, Number(row.monthly_rent))
+      if (!unitId) continue
+      const inviteToken = crypto.randomUUID()
+      const { error } = await supabase.from('tenants').insert({
+        id: crypto.randomUUID(),
+        pm_id: pmUser!.id,
+        unit_id: unitId,
+        name: row.name,
+        email: row.email,
+        phone: row.phone || null,
+        monthly_rent: Number(row.monthly_rent),
+        lease_start: row.lease_start || null,
+        lease_end: row.lease_end,
+        status: 'invited',
+        invite_token: inviteToken,
+        notes: row.notes || null,
+        rent_due_day: row.rent_due_day ? Number(row.rent_due_day) : null,
+      })
+      if (!error) count++
+    }
+    setImporting(false)
+    setImportedCount(count)
+    setDone(true)
+    onImported(count)
+    showToast({ type: 'success', title: `${count} tenant${count !== 1 ? 's' : ''} imported` })
+  }
+
+  const validCount = rows.filter(r => r.errors.length === 0).length
+  const errorCount = rows.filter(r => r.errors.length > 0).length
+  const unknownProps = Array.from(new Set(
+    rows.filter(r => r.errors.length === 0 && !properties.find(p => p.name.toLowerCase().trim() === r.property.toLowerCase().trim())).map(r => r.property)
+  ))
+
+  return (
+    <ModalBackdrop onClose={onClose}>
+      <div className="bg-white rounded-xl border border-gray-200 shadow-lg w-full max-w-2xl max-h-[90vh] flex flex-col animate-scale-in">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">
+          <div>
+            <h2 className="text-base font-bold text-gray-900">Import Tenants</h2>
+            <p className="text-xs text-gray-400">Upload a CSV file to bulk-add tenants</p>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 rounded-lg bg-gray-100 hover:bg-gray-200 flex items-center justify-center"><X className="w-4 h-4" /></button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6 space-y-5">
+          {/* Example download */}
+          <div className="flex items-center justify-between bg-blue-50 border border-blue-200 rounded-xl px-4 py-3">
+            <div>
+              <p className="text-sm font-bold text-blue-900">Download the example CSV</p>
+              <p className="text-xs text-blue-600 mt-0.5">Fill it in and upload below. Property names must match exactly.</p>
+            </div>
+            <button
+              onClick={downloadExample}
+              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3 py-2 rounded-xl transition-colors shrink-0 ml-4"
+            >
+              <FileText className="w-3.5 h-3.5" /> Example CSV
+            </button>
+          </div>
+
+          {/* CSV columns reference */}
+          <div className="bg-gray-50 rounded-xl p-3">
+            <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-2">Required columns</p>
+            <div className="flex flex-wrap gap-1.5">
+              {[
+                { col: 'name', req: true }, { col: 'email', req: true }, { col: 'property', req: true },
+                { col: 'unit', req: true }, { col: 'monthly_rent', req: true }, { col: 'lease_end', req: true },
+                { col: 'phone', req: false }, { col: 'lease_start', req: false }, { col: 'rent_due_day', req: false }, { col: 'notes', req: false },
+              ].map(c => (
+                <span key={c.col} className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${c.req ? 'bg-blue-100 text-blue-700 font-bold' : 'bg-gray-200 text-gray-500'}`}>
+                  {c.col}{c.req ? ' *' : ''}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          {/* Drop zone */}
+          {rows.length === 0 && (
+            <div
+              onDragOver={e => { e.preventDefault(); setDragOver(true) }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={e => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files[0]; if (f) handleFile(f) }}
+              onClick={() => fileRef.current?.click()}
+              className={`border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-all ${dragOver ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50'}`}
+            >
+              <Upload className="w-8 h-8 text-gray-300 mx-auto mb-3" />
+              <p className="text-sm font-semibold text-gray-600">Drop your CSV here or click to browse</p>
+              <p className="text-xs text-gray-400 mt-1">Accepts .csv files</p>
+              <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f) }} />
+            </div>
+          )}
+
+          {/* Preview table */}
+          {rows.length > 0 && !done && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-bold text-gray-800">{rows.length} row{rows.length !== 1 ? 's' : ''} detected</span>
+                {validCount > 0 && <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-green-100 text-green-700">{validCount} valid</span>}
+                {errorCount > 0 && <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-700">{errorCount} with errors</span>}
+                <button onClick={() => { setRows([]); if (fileRef.current) fileRef.current.value = '' }} className="ml-auto text-xs text-gray-500 hover:text-gray-700 underline">Clear</button>
+              </div>
+
+              {unknownProps.length > 0 && (
+                <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-xs text-amber-800">
+                  <span className="font-bold">Unknown properties:</span> {unknownProps.join(', ')} — these rows will be skipped. Make sure property names exactly match your existing properties.
+                </div>
+              )}
+
+              <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-gray-100 bg-gray-50">
+                        {['#', 'Name', 'Email', 'Property', 'Unit', 'Rent', 'Lease End', 'Status'].map(h => (
+                          <th key={h} className="text-left px-3 py-2 font-semibold text-gray-500">{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows.map(r => {
+                        const propFound = properties.find(p => p.name.toLowerCase().trim() === r.property.toLowerCase().trim())
+                        const hasError = r.errors.length > 0 || !propFound
+                        return (
+                          <tr key={r.row} className={`border-b border-gray-50 ${hasError ? 'bg-red-50' : ''}`}>
+                            <td className="px-3 py-2 text-gray-400">{r.row}</td>
+                            <td className="px-3 py-2 font-medium text-gray-800 whitespace-nowrap">{r.name || <span className="text-red-400 italic">missing</span>}</td>
+                            <td className="px-3 py-2 text-gray-600 whitespace-nowrap">{r.email || <span className="text-red-400 italic">missing</span>}</td>
+                            <td className={`px-3 py-2 whitespace-nowrap ${propFound ? 'text-gray-600' : 'text-red-600 font-semibold'}`}>{r.property || '—'}</td>
+                            <td className="px-3 py-2 text-gray-600">{r.unit || '—'}</td>
+                            <td className="px-3 py-2 text-gray-600">{r.monthly_rent ? `$${Number(r.monthly_rent).toLocaleString()}` : <span className="text-red-400 italic">missing</span>}</td>
+                            <td className="px-3 py-2 text-gray-600 whitespace-nowrap">{r.lease_end || <span className="text-red-400 italic">missing</span>}</td>
+                            <td className="px-3 py-2">
+                              {hasError
+                                ? <span className="px-1.5 py-0.5 rounded-full bg-red-100 text-red-700 font-semibold text-[10px]">Skip</span>
+                                : <span className="px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 font-semibold text-[10px]">Import</span>}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {done && (
+            <div className="text-center py-6">
+              <div className="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <CheckCircle className="w-7 h-7 text-green-600" />
+              </div>
+              <p className="text-base font-bold text-gray-900">{importedCount} tenant{importedCount !== 1 ? 's' : ''} imported</p>
+              <p className="text-xs text-gray-400 mt-1">They'll appear in your tenants list. Send invites individually to notify them.</p>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        {!done && (
+          <div className="shrink-0 px-6 py-4 border-t border-gray-100 flex items-center justify-between gap-3">
+            <p className="text-xs text-gray-400">{validCount > 0 ? `${validCount} tenant${validCount !== 1 ? 's' : ''} will be imported` : rows.length > 0 ? 'Fix errors above to enable import' : 'Upload a CSV to get started'}</p>
+            <div className="flex gap-2">
+              <button onClick={onClose} className="border border-gray-200 hover:bg-gray-50 text-gray-700 font-semibold py-2 px-4 rounded-xl text-sm transition-colors">Cancel</button>
+              <button
+                onClick={handleImport}
+                disabled={importing || validCount === 0}
+                className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-2 px-4 rounded-xl text-sm transition-colors flex items-center gap-2"
+              >
+                {importing && <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+                {importing ? 'Importing…' : `Import ${validCount > 0 ? validCount : ''} Tenant${validCount !== 1 ? 's' : ''}`}
+              </button>
+            </div>
+          </div>
+        )}
+        {done && (
+          <div className="shrink-0 px-6 py-4 border-t border-gray-100 flex justify-end">
+            <button onClick={onClose} className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-5 rounded-xl text-sm transition-colors">Done</button>
+          </div>
+        )}
+      </div>
+    </ModalBackdrop>
+  )
+}
+
 interface TenantsPanelProps {
   tenants: Tenant[]
   setTenants: React.Dispatch<React.SetStateAction<Tenant[]>>
@@ -2684,9 +3744,11 @@ interface TenantsPanelProps {
   onEditTenant: (id: string) => void
   onViewTenant: (id: string) => void
   onLogPayment: (tenantId: string) => void
+  properties: Property[]
 }
 
-function TenantsPanel({ tenants, setTenants, rentRecords, threads, setThreads, setActivePanel, setSelectedThreadId, onShowInviteModal, onEditTenant, onViewTenant, onLogPayment }: TenantsPanelProps) {
+function TenantsPanel({ tenants, setTenants, rentRecords, threads, setThreads, setActivePanel, setSelectedThreadId, onShowInviteModal, onEditTenant, onViewTenant, onLogPayment, properties }: TenantsPanelProps) {
+  const [showImport, setShowImport] = useState(false)
   const [search, setSearch] = useState('')
   const [filterProperty, setFilterProperty] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
@@ -2837,12 +3899,20 @@ function TenantsPanel({ tenants, setTenants, rentRecords, threads, setThreads, s
           <h2 className="text-lg font-bold text-gray-900">Tenants</h2>
           <p className="text-xs text-gray-500">{totalTenants} tenants across all properties</p>
         </div>
-        <button
-          onClick={onShowInviteModal}
-          className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2 rounded-xl flex items-center gap-2 transition-colors"
-        >
-          <Plus className="w-4 h-4" /> Invite Tenant
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowImport(true)}
+            className="border border-gray-200 hover:bg-gray-50 text-gray-700 text-sm font-semibold px-4 py-2 rounded-xl flex items-center gap-2 transition-colors"
+          >
+            <Upload className="w-4 h-4" /> Import CSV
+          </button>
+          <button
+            onClick={onShowInviteModal}
+            className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2 rounded-xl flex items-center gap-2 transition-colors"
+          >
+            <Plus className="w-4 h-4" /> Invite Tenant
+          </button>
+        </div>
       </div>
 
       {/* Stats */}
@@ -3034,6 +4104,17 @@ function TenantsPanel({ tenants, setTenants, rentRecords, threads, setThreads, s
           <div className="text-center py-10 text-gray-400 text-sm">No tenants match your filters.</div>
         )}
       </div>
+
+      {showImport && (
+        <ImportTenantsModal
+          properties={properties}
+          onClose={() => setShowImport(false)}
+          onImported={(count) => {
+            setShowImport(false)
+            if (count > 0) showToast({ type: 'success', title: `${count} tenant${count !== 1 ? 's' : ''} imported — refresh to see them` })
+          }}
+        />
+      )}
     </div>
   )
 }
@@ -3048,9 +4129,12 @@ interface MaintenancePanelProps {
   onClearFocus?: () => void
   addActivity?: (entry: { type: 'payment' | 'ticket' | 'tenant' | 'announcement' | 'lease'; text: string }) => void
   onViewTenant?: (tenantId: string) => void
+  properties?: Property[]
+  initialSubTab?: 'tickets' | 'inspections'
 }
 
-function MaintenancePanel({ tickets, setTickets, onShowNewTicketModal, focusedTicketId, onClearFocus, addActivity, onViewTenant }: MaintenancePanelProps) {
+function MaintenancePanel({ tickets, setTickets, onShowNewTicketModal, focusedTicketId, onClearFocus, addActivity, onViewTenant, properties = [], initialSubTab = 'tickets' }: MaintenancePanelProps) {
+  const [mainTab, setMainTab] = useState<'tickets' | 'inspections'>(initialSubTab)
   const [filterStatus, setFilterStatus] = useState<'all' | 'open' | 'in_progress' | 'resolved'>('all')
   const [filterProperty, setFilterProperty] = useState('')
   const [filterPriority, setFilterPriority] = useState('')
@@ -3166,28 +4250,58 @@ function MaintenancePanel({ tickets, setTickets, onShowNewTicketModal, focusedTi
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <h2 className="text-lg font-bold text-gray-900">Maintenance</h2>
-          <div className="flex gap-1.5">
-            {[
-              { label: `${tickets.filter(t=>t.status==='open').length} Open`, color: 'bg-blue-100 text-blue-700' },
-              { label: `${tickets.filter(t=>t.status==='in_progress').length} In Progress`, color: 'bg-amber-100 text-amber-700' },
-              { label: `${tickets.filter(t=>t.status==='resolved').length} Resolved`, color: 'bg-green-100 text-green-700' },
-            ].map(c => (
-              <span key={c.label} className={`text-xs font-semibold px-2 py-0.5 rounded-full ${c.color}`}>{c.label}</span>
-            ))}
-          </div>
+          {mainTab === 'tickets' && (
+            <div className="flex gap-1.5">
+              {[
+                { label: `${tickets.filter(t=>t.status==='open').length} Open`, color: 'bg-blue-100 text-blue-700' },
+                { label: `${tickets.filter(t=>t.status==='in_progress').length} In Progress`, color: 'bg-amber-100 text-amber-700' },
+                { label: `${tickets.filter(t=>t.status==='resolved').length} Resolved`, color: 'bg-green-100 text-green-700' },
+              ].map(c => (
+                <span key={c.label} className={`text-xs font-semibold px-2 py-0.5 rounded-full ${c.color}`}>{c.label}</span>
+              ))}
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => setShowAnalytics(!showAnalytics)}
-            className="text-xs text-gray-500 hover:text-gray-700 border border-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-50"
-          >
-            {showAnalytics ? 'Hide Analytics' : 'Show Analytics'}
-          </button>
-          <button onClick={onShowNewTicketModal} className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2 rounded-xl flex items-center gap-2 transition-colors">
-            <Plus className="w-4 h-4" /> New Ticket
-          </button>
+          {mainTab === 'tickets' && (
+            <>
+              <button
+                onClick={() => setShowAnalytics(!showAnalytics)}
+                className="text-xs text-gray-500 hover:text-gray-700 border border-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-50"
+              >
+                {showAnalytics ? 'Hide Analytics' : 'Show Analytics'}
+              </button>
+              <button onClick={onShowNewTicketModal} className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2 rounded-xl flex items-center gap-2 transition-colors">
+                <Plus className="w-4 h-4" /> New Ticket
+              </button>
+            </>
+          )}
         </div>
       </div>
+
+      {/* Sub-tab switcher */}
+      <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
+        <button
+          onClick={() => setMainTab('tickets')}
+          className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors flex items-center gap-1.5 ${mainTab === 'tickets' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
+        >
+          <Wrench className="w-3.5 h-3.5" /> Tickets
+        </button>
+        <button
+          onClick={() => setMainTab('inspections')}
+          className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors flex items-center gap-1.5 ${mainTab === 'inspections' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
+        >
+          <CheckCircle className="w-3.5 h-3.5" /> Inspections
+        </button>
+      </div>
+
+      {/* Inspections sub-panel */}
+      {mainTab === 'inspections' && (
+        <InspectionsSubPanel properties={properties} />
+      )}
+
+      {/* Tickets content (only when tickets tab is active) */}
+      {mainTab === 'tickets' && (<>
 
       {/* Analytics */}
       {showAnalytics && (
@@ -3385,6 +4499,7 @@ function MaintenancePanel({ tickets, setTickets, onShowNewTicketModal, focusedTi
           }}
         />
       )}
+      </>)}
     </div>
   )
 }
@@ -5005,7 +6120,7 @@ export default function AdminPortal() {
   // Auth
   const { user, signOut } = useAuth()
   const { demoMode, setDemoMode } = useDemoMode()
-  const { companyName } = useBranding()
+  const { companyName, primaryColor } = useBranding()
 
   // Supabase data hooks
   const { data: tenantsData, loading: tenantsLoading } = useTenants()
@@ -5061,8 +6176,8 @@ export default function AdminPortal() {
   const [showNewTicketModal, setShowNewTicketModal] = useState(false)
   const [showReportModal, setShowReportModal] = useState(false)
   const [showAnnouncementModal, setShowAnnouncementModal] = useState(false)
-  const [showScheduleModal, setShowScheduleModal] = useState(false)
   const [showNewThreadModal, setShowNewThreadModal] = useState(false)
+  const [maintenanceSubTab, setMaintenanceSubTab] = useState<'tickets' | 'inspections'>('tickets')
 
   // Tenant modals
   const [editTenantId, setEditTenantId] = useState<string | null>(null)
@@ -5159,7 +6274,8 @@ export default function AdminPortal() {
             onShowAddPropertyModal={() => setShowAddPropertyModal(true)}
             onShowReportModal={() => setShowReportModal(true)}
             onShowAnnouncementModal={() => setShowAnnouncementModal(true)}
-            onShowScheduleModal={() => setShowScheduleModal(true)}
+            onShowScheduleModal={() => { setMaintenanceSubTab('inspections'); setActivePanel('maintenance'); setTimeout(() => setMaintenanceSubTab('tickets'), 200) }}
+            tickets={tickets}
             tenants={tenants}
             properties={propertiesList}
             rentRecords={rentRecords}
@@ -5199,6 +6315,7 @@ export default function AdminPortal() {
             onViewTenant={(id) => setViewTenantId(id)}
             rentRecords={rentRecords}
             onLogPayment={(tenantId) => setLogPaymentTenantId(tenantId)}
+            properties={propertiesList}
           />
         )
       case 'maintenance':
@@ -5211,6 +6328,8 @@ export default function AdminPortal() {
             onClearFocus={() => setFocusedMaintenanceTicketId(null)}
             addActivity={addActivity}
             onViewTenant={(id) => setViewTenantId(id)}
+            properties={propertiesList}
+            initialSubTab={maintenanceSubTab}
           />
         )
       case 'messages':
@@ -5281,7 +6400,7 @@ export default function AdminPortal() {
                     ? 'text-white shadow-md'
                     : 'text-slate-400 hover:text-white hover:bg-white/[0.06]'
                 } ${!sidebarOpen ? 'justify-center' : ''}`}
-                style={isActive ? { background: 'linear-gradient(135deg, #3B82F6 0%, #2563EB 100%)', boxShadow: '0 4px 12px rgba(59,130,246,0.35)' } : {}}
+                style={isActive ? { background: primaryColor, boxShadow: `0 4px 12px ${primaryColor}59` } : {}}
               >
                 <div className="shrink-0 relative">
                   {item.icon}
@@ -5315,7 +6434,7 @@ export default function AdminPortal() {
                 ? 'text-white'
                 : 'text-slate-400 hover:text-white hover:bg-white/[0.06]'
             } ${!sidebarOpen ? 'justify-center' : ''}`}
-            style={activePanel === 'settings' ? { background: 'linear-gradient(135deg, #3B82F6 0%, #2563EB 100%)', boxShadow: '0 4px 12px rgba(59,130,246,0.35)' } : {}}
+            style={activePanel === 'settings' ? { background: primaryColor, boxShadow: `0 4px 12px ${primaryColor}59` } : {}}
           >
             <Settings className="w-5 h-5 shrink-0" />
             <span className={`text-sm font-medium whitespace-nowrap transition-all duration-300 overflow-hidden ${sidebarOpen ? 'opacity-100 w-auto' : 'opacity-0 w-0'}`}>Settings</span>
@@ -5519,12 +6638,6 @@ export default function AdminPortal() {
           properties={propertiesList}
           onClose={() => setShowAnnouncementModal(false)}
           onSent={(subject, count) => addActivity({ type: 'announcement', text: `"${subject}" sent to ${count} tenant${count !== 1 ? 's' : ''}` })}
-        />
-      )}
-      {showScheduleModal && (
-        <ScheduleInspectionModal
-          properties={propertiesList}
-          onClose={() => setShowScheduleModal(false)}
         />
       )}
       {showNewThreadModal && (

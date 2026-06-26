@@ -24,6 +24,7 @@ function transform(row: Record<string, unknown>): Tenant {
     email: (row.email as string) ?? '',
     phone: (row.phone as string) ?? '',
     moveIn: fmtDate(row.lease_start as string | null),
+    rentDueDay: (row.rent_due_day as number | null) ?? null,
   }
 }
 

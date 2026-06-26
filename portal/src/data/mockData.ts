@@ -12,6 +12,7 @@ export interface Tenant {
   email: string
   phone: string
   moveIn: string
+  rentDueDay?: number | null  // day-of-month (1–28) rent is due; null = no reminder
 }
 
 export interface MaintenanceTicket {

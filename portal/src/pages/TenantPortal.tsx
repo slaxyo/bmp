@@ -3,13 +3,14 @@ import {
   Home, DollarSign, Wrench, MessageSquare, FileText,
   ChevronRight, Check, X, Plus, Send, Smile, Paperclip,
   Edit2, MoreHorizontal, Upload, CreditCard, Building2, Search, LogOut,
+  Phone, Mail, Bell,
 } from 'lucide-react'
 import type { Tenant } from '../data/mockData'
 import { supabase } from '../lib/supabase'
 import { useBranding } from '../context/BrandingContext'
 import { BrandLogo } from '../components/BrandLogo'
 import { NotificationBell } from '../components/NotificationBell'
-import { NotificationsProvider } from '../hooks/useNotifications'
+import { NotificationsProvider, useNotificationsContext } from '../hooks/useNotifications'
 import { notifyUser } from '../lib/notify'
 import { useDocuments } from '../hooks/useDocuments'
 import { useCurrentTenant } from '../hooks/useTenants'
@@ -449,10 +450,14 @@ function MaintenanceModal({
 
 function PayRentModal({
   amount,
+  monthLabel,
+  dueDateStr,
   onClose,
   onSuccess,
 }: {
   amount: number
+  monthLabel: string
+  dueDateStr: string
   onClose: () => void
   onSuccess: (method: string, amt: number, note: string) => void
 }) {
@@ -499,6 +504,21 @@ function PayRentModal({
           </button>
         </div>
         <div className="p-6 space-y-4">
+          {/* Payment context */}
+          <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 space-y-1">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-gray-500 font-medium">Paying for</span>
+              <span className="font-semibold text-gray-900">{monthLabel} Rent</span>
+            </div>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-gray-500 font-medium">Due date</span>
+              <span className="font-semibold text-gray-900">{dueDateStr}</span>
+            </div>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-gray-500 font-medium">Payment date</span>
+              <span className="font-semibold text-gray-900">{new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+            </div>
+          </div>
           <div>
             <label className="block text-xs font-semibold text-gray-700 mb-1">Amount ($)</label>
             <input
@@ -658,7 +678,109 @@ function DocPreviewModal({ doc, onClose }: { doc: DocItem; onClose: () => void }
 
 // ─── Overview Tab ─────────────────────────────────────────────────────────────
 
-function OverviewTab({ onNewTicket }: { onNewTicket: () => void }) {
+function PMContactCard({ onMessage }: { onMessage: () => void }) {
+  const { pmId } = useContext(TenantCtx)
+  const { companyName, primaryColor } = useBranding()
+  const [pm, setPm] = useState<{ name: string; phone: string; email: string; title: string; company: string; bio: string; avatarUrl: string | null } | null>(null)
+  const [showFull, setShowFull] = useState(false)
+
+  useEffect(() => {
+    if (!pmId) return
+    supabase.from('profiles').select('full_name, phone, email, title, company, bio, avatar_url').eq('id', pmId).single()
+      .then(({ data }) => {
+        if (data) setPm({
+          name: data.full_name || companyName,
+          phone: data.phone || '',
+          email: data.email || '',
+          title: data.title || 'Property Manager',
+          company: data.company || companyName,
+          bio: data.bio || '',
+          avatarUrl: data.avatar_url || null,
+        })
+      })
+  }, [pmId])
+
+  const initials = pm ? pm.name.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase() : '?'
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+        <h3 className="text-base font-bold text-gray-900">Your Property Manager</h3>
+        <button onClick={() => setShowFull(!showFull)} className="text-xs text-blue-600 font-semibold hover:text-blue-700">
+          {showFull ? 'Less' : 'View profile'}
+        </button>
+      </div>
+      <div className="p-5">
+        <div className="flex items-start gap-4">
+          {pm?.avatarUrl
+            ? <img src={pm.avatarUrl} alt={pm.name} className="w-14 h-14 rounded-2xl object-cover shrink-0 shadow-sm" />
+            : <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-white font-black text-xl shadow-sm shrink-0" style={{ background: primaryColor }}>{initials}</div>
+          }
+          <div className="flex-1 min-w-0">
+            <p className="text-base font-bold text-gray-900">{pm?.name ?? companyName}</p>
+            <p className="text-xs text-gray-500">{pm?.title ?? 'Property Manager'}{pm?.company && pm.company !== pm?.name ? ` · ${pm.company}` : ''}</p>
+            {showFull && pm?.bio && <p className="text-xs text-gray-600 mt-2 leading-relaxed">{pm.bio}</p>}
+          </div>
+        </div>
+
+        {/* Contact actions */}
+        <div className="grid grid-cols-3 gap-2 mt-4">
+          {pm?.phone ? (
+            <a
+              href={`tel:${pm.phone.replace(/\D/g, '')}`}
+              className="flex flex-col items-center gap-1.5 py-3 rounded-xl border-2 border-green-200 bg-green-50 hover:bg-green-100 transition-colors"
+            >
+              <Phone className="w-5 h-5 text-green-600" />
+              <span className="text-xs font-bold text-green-700">Call</span>
+            </a>
+          ) : (
+            <div className="flex flex-col items-center gap-1.5 py-3 rounded-xl border-2 border-gray-100 bg-gray-50 opacity-40 cursor-not-allowed">
+              <Phone className="w-5 h-5 text-gray-400" />
+              <span className="text-xs font-medium text-gray-400">Call</span>
+            </div>
+          )}
+          {pm?.email ? (
+            <a
+              href={`mailto:${pm.email}`}
+              className="flex flex-col items-center gap-1.5 py-3 rounded-xl border-2 border-blue-200 bg-blue-50 hover:bg-blue-100 transition-colors"
+            >
+              <Mail className="w-5 h-5 text-blue-600" />
+              <span className="text-xs font-bold text-blue-700">Email</span>
+            </a>
+          ) : (
+            <div className="flex flex-col items-center gap-1.5 py-3 rounded-xl border-2 border-gray-100 bg-gray-50 opacity-40 cursor-not-allowed">
+              <Mail className="w-5 h-5 text-gray-400" />
+              <span className="text-xs font-medium text-gray-400">Email</span>
+            </div>
+          )}
+          <button
+            onClick={onMessage}
+            className="flex flex-col items-center gap-1.5 py-3 rounded-xl border-2 border-purple-200 bg-purple-50 hover:bg-purple-100 transition-colors"
+          >
+            <MessageSquare className="w-5 h-5 text-purple-600" />
+            <span className="text-xs font-bold text-purple-700">Message</span>
+          </button>
+        </div>
+
+        {/* Phone display */}
+        {showFull && pm?.phone && (
+          <div className="mt-3 flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-xl">
+            <Phone className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+            <a href={`tel:${pm.phone.replace(/\D/g, '')}`} className="text-sm font-semibold text-gray-700 hover:text-green-600 transition-colors">{pm.phone}</a>
+          </div>
+        )}
+        {showFull && pm?.email && (
+          <div className="mt-2 flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-xl">
+            <Mail className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+            <a href={`mailto:${pm.email}`} className="text-sm font-semibold text-gray-700 hover:text-blue-600 transition-colors truncate">{pm.email}</a>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function OverviewTab({ onNewTicket, onGoToMessages }: { onNewTicket: () => void; onGoToMessages: () => void }) {
   const { tenant, tenantId } = useContext(TenantCtx)
   const { data: tickets } = useMaintenanceTickets(undefined, tenantId ?? undefined)
   const openCount = tickets.filter((t) => t.status !== 'resolved').length
@@ -769,6 +891,9 @@ function OverviewTab({ onNewTicket }: { onNewTicket: () => void }) {
           </div>
         </div>
       )}
+
+      {/* PM Contact Card */}
+      <PMContactCard onMessage={onGoToMessages} />
     </div>
   )
 }
@@ -885,6 +1010,34 @@ function PaymentsTab() {
   const [receiptRow, setReceiptRow] = useState<PaymentRow | null>(null)
   const [showPayRent, setShowPayRent] = useState(false)
 
+  const rentAmount = tenant?.rent ?? 0
+
+  // Compute current-month label and due-date string
+  const now = new Date()
+  const currentMonthLabel = now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+  const rentDueDay = tenant?.rentDueDay ?? null
+  const dueDateStr = rentDueDay
+    ? `${currentMonthLabel.split(' ')[0]} ${rentDueDay}, ${now.getFullYear()}`
+    : currentMonthLabel
+
+  // Is rent due today?
+  const isDueToday = rentDueDay !== null && now.getDate() === rentDueDay
+
+  // Has the tenant already reported a payment this calendar month?
+  const thisMonthRecord = rentRecords.find((r) => r.month === currentMonthLabel)
+  const alreadyReportedThisMonth = !!thisMonthRecord && (thisMonthRecord.status === 'pending' || thisMonthRecord.status === 'paid')
+
+  // 1-hour cooldown: find the most recent payment across all months
+  const latestPaidDate = rentRecords
+    .filter((r) => r.datePaid && r.datePaid !== '—')
+    .map((r) => new Date(r.datePaid).getTime())
+    .filter((t) => !isNaN(t))
+    .sort((a, b) => b - a)[0] ?? null
+  const cooldownMs = 60 * 60 * 1000 // 1 hour
+  const msSinceLastPayment = latestPaidDate !== null ? Date.now() - latestPaidDate : Infinity
+  const inCooldown = msSinceLastPayment < cooldownMs
+  const cooldownMinutesLeft = inCooldown ? Math.ceil((cooldownMs - msSinceLastPayment) / 60000) : 0
+
   const cashFlowRows: PaymentRow[] = rentRecords.map((r) => ({
     month: r.month,
     amount: r.amount,
@@ -895,33 +1048,76 @@ function PaymentsTab() {
 
   async function handlePaySuccess(method: string, amt: number, note: string) {
     if (demoMode) { showToast({ type: 'info', title: 'Demo mode — no payment recorded' }); return }
+    if (alreadyReportedThisMonth) {
+      showToast({ type: 'error', title: 'Payment already reported this month' }); return
+    }
+    if (inCooldown) {
+      showToast({ type: 'error', title: `Please wait ${cooldownMinutesLeft} more minute${cooldownMinutesLeft !== 1 ? 's' : ''} before submitting again` }); return
+    }
     if (tenantId && pmId) {
       const today = new Date()
-      const noteText = [method, note].filter(Boolean).join(' — ')
+      const noteText = [note.trim(), `via ${method}`].filter(Boolean).join(' · ')
+      const dueDate = rentDueDay
+        ? new Date(today.getFullYear(), today.getMonth(), rentDueDay).toISOString().slice(0, 10)
+        : today.toISOString().slice(0, 10)
       await supabase.from('rent_payments').insert({
         pm_id: pmId,
         tenant_id: tenantId,
         amount: amt,
-        due_date: today.toISOString().slice(0, 10),
+        due_date: dueDate,
+        paid_date: today.toISOString().slice(0, 10),
         status: 'pending',
         note: noteText,
       })
       await refetchRent()
     }
-    showToast({ type: 'success', title: 'Payment reported', body: 'Your property manager will confirm receipt shortly.' })
+    showToast({ type: 'success', title: 'Payment reported', message: 'Your property manager will confirm receipt shortly.' })
   }
 
-  const rentAmount = tenant?.rent ?? 0
+  // Decide button state
+  const canPay = !alreadyReportedThisMonth && !inCooldown
+  const payBtnLabel = alreadyReportedThisMonth
+    ? `Already reported for ${currentMonthLabel}`
+    : inCooldown
+    ? `Wait ${cooldownMinutesLeft}m before next report`
+    : `Pay Rent — $${rentAmount.toLocaleString()}`
 
   return (
     <div className="p-6 space-y-5">
+      {/* Due Today banner */}
+      {isDueToday && !alreadyReportedThisMonth && (
+        <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+          <span className="text-amber-500 mt-0.5 shrink-0">⚠️</span>
+          <div>
+            <p className="text-sm font-semibold text-amber-900">Rent due today</p>
+            <p className="text-xs text-amber-700 mt-0.5">Your rent of ${rentAmount.toLocaleString()} is due today ({dueDateStr}). Report your payment below.</p>
+          </div>
+        </div>
+      )}
+
+      {/* Already reported banner */}
+      {alreadyReportedThisMonth && (
+        <div className="flex items-start gap-3 bg-green-50 border border-green-200 rounded-xl px-4 py-3">
+          <Check className="w-4 h-4 text-green-600 mt-0.5 shrink-0" />
+          <div>
+            <p className="text-sm font-semibold text-green-900">Payment reported for {currentMonthLabel}</p>
+            <p className="text-xs text-green-700 mt-0.5">Status: <span className="font-medium capitalize">{thisMonthRecord?.status}</span>. Your manager will confirm receipt.</p>
+          </div>
+        </div>
+      )}
+
       {/* Pay Rent CTA */}
       <button
-        onClick={() => setShowPayRent(true)}
-        className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-bold py-4 rounded-2xl text-base shadow-lg transition-all flex items-center justify-center gap-3"
+        onClick={() => canPay && setShowPayRent(true)}
+        disabled={!canPay}
+        className={`w-full font-bold py-4 rounded-2xl text-base shadow-lg transition-all flex items-center justify-center gap-3 ${
+          canPay
+            ? 'bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white cursor-pointer'
+            : 'bg-gray-100 text-gray-400 cursor-not-allowed shadow-none'
+        }`}
       >
         <DollarSign className="w-5 h-5" />
-        Pay Rent{rentAmount > 0 ? ` — $${rentAmount.toLocaleString()}` : ''}
+        {payBtnLabel}
       </button>
 
       {/* Current month card */}
@@ -1057,6 +1253,8 @@ function PaymentsTab() {
       {showPayRent && (
         <PayRentModal
           amount={rentAmount}
+          monthLabel={currentMonthLabel}
+          dueDateStr={dueDateStr}
           onClose={() => setShowPayRent(false)}
           onSuccess={handlePaySuccess}
         />
@@ -1555,11 +1753,75 @@ function TenantDocumentsTab() {
   )
 }
 
+// ─── Announcement Banner ──────────────────────────────────────────────────────
+
+function AnnouncementBanner() {
+  const { data: notifications, markRead } = useNotificationsContext()
+  const [dismissed, setDismissed] = useState<Set<string>>(new Set())
+
+  const announcements = notifications.filter(n => n.type === 'announcement' && !n.read && !dismissed.has(n.id))
+  if (announcements.length === 0) return null
+
+  function dismiss(id: string) {
+    setDismissed(prev => new Set([...prev, id]))
+    markRead(id)
+  }
+
+  function getPriorityStyle(link: string | null) {
+    const params = new URLSearchParams((link ?? '').split('?')[1] ?? '')
+    const p = params.get('p')
+    if (p === 'urgent') return { bar: 'bg-red-500', bg: 'bg-red-50 border-red-200', title: 'text-red-800', body: 'text-red-700', badge: 'bg-red-100 text-red-700', label: 'URGENT' }
+    if (p === 'high') return { bar: 'bg-orange-400', bg: 'bg-orange-50 border-orange-200', title: 'text-orange-800', body: 'text-orange-700', badge: 'bg-orange-100 text-orange-700', label: 'HIGH PRIORITY' }
+    return { bar: 'bg-blue-500', bg: 'bg-blue-50 border-blue-200', title: 'text-blue-900', body: 'text-blue-700', badge: 'bg-blue-100 text-blue-700', label: 'NOTICE' }
+  }
+
+  function getCategory(link: string | null) {
+    const params = new URLSearchParams((link ?? '').split('?')[1] ?? '')
+    const cat = params.get('c')
+    const labels: Record<string, string> = { general: 'General Notice', maintenance: 'Maintenance', policy: 'Policy Update', event: 'Community Event', emergency: 'Emergency' }
+    return cat ? labels[cat] ?? 'Announcement' : 'Announcement'
+  }
+
+  return (
+    <div className="px-4 md:px-6 pt-4 space-y-2">
+      {announcements.slice(0, 3).map(n => {
+        const style = getPriorityStyle(n.link)
+        const category = getCategory(n.link)
+        return (
+          <div key={n.id} className={`relative rounded-xl border ${style.bg} overflow-hidden`}>
+            <div className={`absolute left-0 top-0 bottom-0 w-1 ${style.bar}`} />
+            <div className="pl-4 pr-3 py-3 flex items-start gap-3">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-0.5">
+                  <span className={`text-[10px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded ${style.badge}`}>{style.label}</span>
+                  <span className="text-[10px] text-gray-400 font-medium">{category}</span>
+                  <span className="text-[10px] text-gray-400">{n.createdAt}</span>
+                </div>
+                <p className={`text-sm font-bold ${style.title}`}>{n.title}</p>
+                <p className={`text-xs mt-0.5 ${style.body}`}>{n.body}</p>
+              </div>
+              <button
+                onClick={() => dismiss(n.id)}
+                className="w-6 h-6 rounded-full bg-white/70 hover:bg-white flex items-center justify-center shrink-0 mt-0.5 transition-colors"
+              >
+                <X className="w-3.5 h-3.5 text-gray-500" />
+              </button>
+            </div>
+          </div>
+        )
+      })}
+      {announcements.length > 3 && (
+        <p className="text-xs text-gray-400 text-center pb-1">{announcements.length - 3} more announcement{announcements.length - 3 !== 1 ? 's' : ''} in your notifications</p>
+      )}
+    </div>
+  )
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function TenantPortal() {
   const { data: tenant, tenantId, pmId, unitId } = useCurrentTenant()
-  const { companyName } = useBranding()
+  const { companyName, primaryColor } = useBranding()
   const { signOut } = useAuth()
   const { demoMode } = useDemoMode()
   const [activeTab, setActiveTab] = useLocalState<Tab>('bmp_tenant_tab', 'overview')
@@ -1608,7 +1870,7 @@ export default function TenantPortal() {
       <aside className="hidden md:flex flex-col w-56 shrink-0 sticky top-0 h-screen overflow-y-auto" style={{ background: 'linear-gradient(180deg,#0F172A 0%,#1E293B 100%)', borderRight: '1px solid rgba(255,255,255,0.06)' }}>
         {/* Logo */}
         <div className="flex items-center gap-3 px-4 py-5" style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
-          <BrandLogo wrapperClassName="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 overflow-hidden" iconClassName="w-4 h-4 text-white" style={{ background: 'linear-gradient(135deg,#3B82F6 0%,#1D4ED8 100%)' }} />
+          <BrandLogo wrapperClassName="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 overflow-hidden" iconClassName="w-4 h-4 text-white" style={{ background: primaryColor }} />
           <div>
             <p className="text-white font-bold text-sm whitespace-nowrap tracking-tight">{companyName}</p>
             <p className="text-slate-500 text-[11px] font-medium uppercase tracking-wide">Tenant Portal</p>
@@ -1633,7 +1895,7 @@ export default function TenantPortal() {
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-150 text-left ${
                   isActive ? 'text-white shadow-md' : 'text-slate-400 hover:text-white hover:bg-white/[0.06]'
                 }`}
-                style={isActive ? { background: 'linear-gradient(135deg,#3B82F6 0%,#2563EB 100%)', boxShadow: '0 4px 12px rgba(59,130,246,0.35)' } : {}}
+                style={isActive ? { background: primaryColor, boxShadow: `0 4px 12px ${primaryColor}59` } : {}}
               >
                 <span className="shrink-0">{tab.icon}</span>
                 <span className="text-sm font-medium">{tab.label}</span>
@@ -1645,7 +1907,7 @@ export default function TenantPortal() {
         {/* Profile + sign out */}
         <div className="mx-3 mb-4 mt-3 rounded-xl p-3" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)' }}>
           <div className="flex items-center gap-2 mb-3">
-            <div className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-white font-bold text-xs ring-2 ring-blue-500/40" style={{ background: 'linear-gradient(135deg,#3B82F6,#1D4ED8)' }}>
+            <div className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-white font-bold text-xs ring-2 ring-blue-500/40" style={{ background: primaryColor }}>
               {tenant ? tenant.name.split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase() : '…'}
             </div>
             <div className="min-w-0">
@@ -1738,7 +2000,8 @@ export default function TenantPortal() {
           className={`flex-1 ${panelFullHeight ? 'flex flex-col overflow-hidden' : 'overflow-y-auto'}`}
           style={panelFullHeight ? { height: 'calc(100vh - 60px)' } : {}}
         >
-          {activeTab === 'overview' && <OverviewTab onNewTicket={() => setShowMaintenanceModal(true)} />}
+          {activeTab !== 'messages' && <AnnouncementBanner />}
+          {activeTab === 'overview' && <OverviewTab onNewTicket={() => setShowMaintenanceModal(true)} onGoToMessages={() => setActiveTab('messages')} />}
           {activeTab === 'maintenance' && <MaintenanceListTab onNew={() => setShowMaintenanceModal(true)} />}
           {activeTab === 'payments' && <PaymentsTab />}
           {activeTab === 'messages' && <TenantMessagesTab />}

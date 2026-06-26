@@ -243,6 +243,7 @@ function PortfolioHealthModal({ onClose }: { onClose: () => void }) {
 
 function TenantProfileModal({ tenantId, onClose }: { tenantId: string; onClose: () => void }) {
   const { allTenants, allTickets } = useContext(OwnerDataCtx)
+  const { primaryColor } = useBranding()
   const tenant = allTenants.find(t => t.id === tenantId)
   if (!tenant) return null
 
@@ -257,7 +258,7 @@ function TenantProfileModal({ tenantId, onClose }: { tenantId: string; onClose: 
         <div className="px-6 py-5 border-b border-gray-100" style={{ background: 'linear-gradient(135deg, #F8FAFF 0%, #EFF6FF 100%)' }}>
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-4">
-              <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-white font-black text-xl shadow" style={{ background: 'linear-gradient(135deg, #3B82F6, #1D4ED8)' }}>
+              <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-white font-black text-xl shadow" style={{ background: primaryColor }}>
                 {tenant.name.split(' ').map(w => w[0]).join('').slice(0, 2)}
               </div>
               <div>
@@ -440,6 +441,7 @@ function TicketDetailModal({ ticket, onClose }: { ticket: MaintenanceTicket; onC
 
 function PropertyManageSheet({ property, onClose }: { property: Property; onClose: () => void }) {
   const { allTenants, allTickets } = useContext(OwnerDataCtx)
+  const { primaryColor } = useBranding()
   const [manageTab, setManageTab] = useState<'overview' | 'tenants' | 'maintenance' | 'settings'>('overview')
   const [tenantSearch, setTenantSearch] = useState('')
   const [viewTenantId, setViewTenantId] = useState<string | null>(null)
@@ -646,7 +648,7 @@ function PropertyManageSheet({ property, onClose }: { property: Property; onClos
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0" style={{ background: 'linear-gradient(135deg, #3B82F6, #1D4ED8)' }}>
+                          <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0" style={{ background: primaryColor }}>
                             {t.name.split(' ').map(w => w[0]).join('').slice(0, 2)}
                           </div>
                           <div>
@@ -940,6 +942,7 @@ function OwnerReportModal({ report, onClose }: { report: ReportData; onClose: ()
 
 function OverviewTab({ onShowHealth }: { onShowHealth: () => void }) {
   const { ownerName } = useContext(OwnerDataCtx)
+  const { primaryColor } = useBranding()
   const [activity, setActivity] = useState<{ id: string; type: string; text: string; time: string }[]>([])
   useEffect(() => {
     supabase.from('activity_log').select('*').order('created_at', { ascending: false }).limit(5)
@@ -1043,6 +1046,7 @@ function OverviewTab({ onShowHealth }: { onShowHealth: () => void }) {
 
 function PropertiesTab() {
   const { allTenants, allProperties } = useContext(OwnerDataCtx)
+  const { primaryColor } = useBranding()
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [tenantSearch, setTenantSearch] = useState<Record<string, string>>({})
   const [managingProperty, setManagingProperty] = useState<Property | null>(null)
@@ -1114,7 +1118,7 @@ function PropertiesTab() {
                 <button
                   onClick={() => setManagingProperty(p)}
                   className="flex-1 text-white text-xs font-bold py-2.5 rounded-xl transition-all shadow hover:shadow-md active:scale-95"
-                  style={{ background: 'linear-gradient(135deg, #3B82F6, #1D4ED8)' }}
+                  style={{ background: primaryColor }}
                 >
                   Manage
                 </button>
@@ -1161,7 +1165,7 @@ function PropertiesTab() {
                         className="w-full text-left flex items-center justify-between p-2.5 rounded-xl hover:bg-blue-50 hover:border-blue-200 border border-transparent transition-all group"
                       >
                         <div className="flex items-center gap-2 min-w-0">
-                          <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-bold shrink-0" style={{ background: 'linear-gradient(135deg, #3B82F6, #1D4ED8)' }}>
+                          <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-bold shrink-0" style={{ background: primaryColor }}>
                             {t.name.split(' ').map(w => w[0]).join('').slice(0, 2)}
                           </div>
                           <div className="min-w-0">
@@ -1192,6 +1196,7 @@ function PropertiesTab() {
 // ─── Financials Tab ───────────────────────────────────────────────────────────
 
 function FinancialsTab() {
+  const { primaryColor } = useBranding()
   const totalExpenses = expenseBreakdown.reduce((s, e) => s + e.value, 0)
   const totalRevenue = 14400
   const noi = totalRevenue - totalExpenses
@@ -1218,7 +1223,7 @@ function FinancialsTab() {
               <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
               <Tooltip formatter={v => [`$${Number(v).toLocaleString()}`, '']} contentStyle={{ borderRadius: 8, border: '1px solid #E5E7EB', fontSize: 12 }} />
-              <Bar dataKey="revenue" fill="#2563EB" radius={[4,4,0,0]} name="Revenue" />
+              <Bar dataKey="revenue" fill={primaryColor} radius={[4,4,0,0]} name="Revenue" />
               <Bar dataKey="expenses" fill="#E5E7EB" radius={[4,4,0,0]} name="Expenses" />
             </BarChart>
           </ResponsiveContainer>
@@ -1447,7 +1452,7 @@ function ReportsTab() {
 
 export default function OwnerPortal() {
   const { user, signOut } = useAuth()
-  const { companyName } = useBranding()
+  const { companyName, primaryColor } = useBranding()
   const { data: propertiesData, loading: propertiesLoading } = useProperties()
   const { data: tenantsData, loading: tenantsLoading } = useTenants()
   const { data: ticketsData, loading: ticketsLoading } = useMaintenanceTickets()
@@ -1493,7 +1498,7 @@ export default function OwnerPortal() {
       {/* Header */}
       <header className="bg-white border-b border-gray-200 px-6 h-14 flex items-center justify-between sticky top-0 z-30 shadow-sm">
         <div className="flex items-center gap-3">
-          <BrandLogo wrapperClassName="w-8 h-8 rounded-xl flex items-center justify-center shadow overflow-hidden" iconClassName="w-4 h-4 text-white" style={{ background: 'linear-gradient(135deg, #3B82F6, #1D4ED8)' }} />
+          <BrandLogo wrapperClassName="w-8 h-8 rounded-xl flex items-center justify-center shadow overflow-hidden" iconClassName="w-4 h-4 text-white" style={{ background: primaryColor }} />
           <div>
             <p className="font-black text-gray-900 text-sm leading-none">{companyName}</p>
             <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider leading-none mt-0.5">Owner Portal</p>
