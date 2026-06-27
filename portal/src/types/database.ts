@@ -81,6 +81,12 @@ export type Database = {
         Update: { company_name?: string; tagline?: string | null; logo_url?: string | null; primary_color?: string; updated_at?: string }
         Relationships: []
       }
+      company_admins: {
+        Row: { id: string; user_id: string; created_at: string }
+        Insert: { id?: string; user_id: string; created_at?: string }
+        Update: Record<string, never>
+        Relationships: []
+      }
     }
   }
 }
