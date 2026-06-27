@@ -7525,6 +7525,81 @@ function ExpenseEntryModal({
   )
 }
 
+// ─── Ledger: Add Late Fee (with tenant selector) ─────────────────────────────
+
+function LateFeeSelectTenantModal({ tenants, onClose, onSaved }: { tenants: Tenant[]; onClose: () => void; onSaved: (entry: LedgerEntry) => void }) {
+  const { primaryColor } = useBranding()
+  const [saving, setSaving] = useState(false)
+  const todayStr = new Date().toISOString().split('T')[0]
+  const activeTenants = tenants.filter(t => t.status === 'active' || t.status === 'late')
+  const [form, setForm] = useState({ tenantId: activeTenants[0]?.id ?? '', amount: '', date: todayStr, description: 'Late fee' })
+  const isUuid = (v: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v)
+
+  async function handleSave() {
+    if (!form.amount || Number(form.amount) <= 0 || !form.tenantId) return
+    setSaving(true)
+    const { data: { user: freshUser } } = await supabase.auth.getUser()
+    const { data, error } = await supabase.from('ledger_entries').insert({
+      pm_id: freshUser?.id,
+      tenant_id: isUuid(form.tenantId) ? form.tenantId : null,
+      type: 'late_fee',
+      amount: Math.abs(Number(form.amount)),
+      date: form.date,
+      description: form.description || 'Late fee',
+    }).select().single()
+    if (error) { showToast({ type: 'error', title: 'Failed to save', message: error.message }); setSaving(false); return }
+    const tenant = tenants.find(t => t.id === form.tenantId)
+    showToast({ type: 'success', title: `Late fee of $${Number(form.amount).toLocaleString()} recorded for ${tenant?.name ?? 'tenant'}` })
+    onSaved(ledgerEntryFromRow(data as Record<string, unknown>))
+    setSaving(false)
+  }
+
+  return (
+    <ModalBackdrop onClose={onClose}>
+      <div className="bg-white rounded-xl border border-gray-200 shadow-lg w-full max-w-sm animate-scale-in">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <h2 className="text-base font-bold text-gray-900">Add Late Fee</h2>
+          <button onClick={onClose} className="w-8 h-8 rounded-lg bg-gray-100 hover:bg-gray-200 flex items-center justify-center"><X className="w-4 h-4" /></button>
+        </div>
+        <div className="p-6 space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Tenant *</label>
+            <select value={form.tenantId} onChange={e => setForm(f => ({ ...f, tenantId: e.target.value }))} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500">
+              {activeTenants.length === 0 && <option value="">No active tenants</option>}
+              {activeTenants.map(t => (
+                <option key={t.id} value={t.id}>{t.name} — {t.property}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Amount *</label>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+              <input type="number" min="0" step="0.01" autoFocus value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} placeholder="e.g. 50" className="w-full pl-7 pr-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">Date</label>
+              <input type="date" value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">Description</label>
+              <input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+          </div>
+        </div>
+        <div className="px-6 pb-6 flex gap-3">
+          <button onClick={handleSave} disabled={saving || !form.amount || !form.tenantId} className="flex-1 text-white py-2.5 rounded-xl text-sm font-bold hover:opacity-90 disabled:opacity-50" style={{ background: primaryColor }}>
+            {saving ? 'Saving…' : 'Add Late Fee'}
+          </button>
+          <button onClick={onClose} className="px-4 py-2.5 rounded-xl text-sm font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200">Cancel</button>
+        </div>
+      </div>
+    </ModalBackdrop>
+  )
+}
+
 // ─── Ledger: Late Fee Modal ───────────────────────────────────────────────────
 
 function LateFeeModal({ tenant, onClose, onSaved }: { tenant: Tenant; onClose: () => void; onSaved: (entry: LedgerEntry) => void }) {
@@ -7600,6 +7675,7 @@ function LedgerPanel({ tenants, properties, rentRecords }: { tenants: Tenant[]; 
   const [loading, setLoading] = useState(true)
   const [tableError, setTableError] = useState(false)
   const [showExpenseModal, setShowExpenseModal] = useState(false)
+  const [showAddLateFeeModal, setShowAddLateFeeModal] = useState(false)
   const [monthFilter, setMonthFilter] = useState<string>(() => {
     const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
   })
@@ -7964,12 +8040,20 @@ function LedgerPanel({ tenants, properties, rentRecords }: { tenants: Tenant[]; 
       {/* LATE FEES */}
       {tab === 'late-fees' && (
         <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-gray-500">{lateFeeEntries.length} late fee{lateFeeEntries.length !== 1 ? 's' : ''} recorded</p>
+            <button onClick={() => setShowAddLateFeeModal(true)} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white hover:opacity-90 transition-opacity" style={{ background: primaryColor }}>
+              <Plus className="w-4 h-4" /> Add Late Fee
+            </button>
+          </div>
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
             {lateFeeEntries.length === 0 ? (
               <div className="text-center py-12">
                 <Receipt className="w-8 h-8 text-gray-200 mx-auto mb-2" />
                 <p className="text-sm text-gray-400">No late fees recorded yet</p>
-                <p className="text-xs text-gray-400 mt-1">Add late fees from the tenant profile → Payments tab</p>
+                <button onClick={() => setShowAddLateFeeModal(true)} className="mt-3 text-xs font-semibold px-4 py-2 rounded-xl border border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100 transition-colors">
+                  Add your first late fee
+                </button>
               </div>
             ) : (
               <table className="w-full text-sm">
@@ -8008,6 +8092,14 @@ function LedgerPanel({ tenants, properties, rentRecords }: { tenants: Tenant[]; 
           properties={properties}
           onClose={() => setShowExpenseModal(false)}
           onSaved={(entry) => { setEntries(prev => [entry, ...prev]); setShowExpenseModal(false) }}
+        />
+      )}
+
+      {showAddLateFeeModal && (
+        <LateFeeSelectTenantModal
+          tenants={tenants}
+          onClose={() => setShowAddLateFeeModal(false)}
+          onSaved={(entry) => { setEntries(prev => [entry, ...prev]); setShowAddLateFeeModal(false) }}
         />
       )}
     </div>
